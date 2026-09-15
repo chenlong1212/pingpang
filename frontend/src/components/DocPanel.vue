@@ -67,7 +67,7 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { uploadDoc, uploadText, listDocs } from '../api'
+import { uploadDoc, uploadText as uploadTextApi, listDocs } from '../api'
 
 const activeTab = ref('file')
 const file = ref(null)
@@ -105,7 +105,7 @@ async function uploadText() {
   if (!textForm.content.trim()) return ElMessage.warning('请填写知识内容')
   uploading.value = true
   try {
-    const res = await uploadText({ title: textForm.title.trim(), content: textForm.content.trim() })
+    const res = await uploadTextApi({ title: textForm.title.trim(), content: textForm.content.trim() })
     ElMessage.success(res.data)
     textForm.title = textForm.content = ''
     load()
