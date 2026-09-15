@@ -1,0 +1,29 @@
+import axios from 'axios'
+
+const api = axios.create({
+  baseURL: '/api',
+  timeout: 120000
+})
+
+// 聊天（text/plain，返回纯文本）
+export const chatAsk = (question) =>
+  api.post('/chat/ask', question, {
+    headers: { 'Content-Type': 'text/plain' },
+    responseType: 'text'
+  })
+
+// 选手
+export const savePlayer = (data) => api.post('/player/save', data)
+export const listPlayers = () => api.get('/player/list')
+
+// 比赛
+export const saveMatch = (data) => api.post('/match/save', data)
+export const listMatches = () => api.get('/match/list')
+
+// 知识库文档
+export const uploadDoc = (file) => {
+  const fd = new FormData()
+  fd.append('file', file)
+  return api.post('/doc/upload', fd)
+}
+export const listDocs = () => api.get('/doc/list')

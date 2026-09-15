@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>乒乓龙 · 乒乓球智能体助手</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+            background: linear-gradient(135deg, #f0f4f8 0%, #e6edf5 100%);
+            min-height: 100vh;
+            color: #1f2937;
+        }
+        .header {
+            background: linear-gradient(90deg, #0f766e 0%, #115e59 100%);
+            color: #fff;
+            padding: 18px 32px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            box-shadow: 0 2px 12px rgba(0,0,0,.15);
+        }
+        .header h1 { font-size: 22px; font-weight: 700; }
+        .header .badge {
+            background: rgba(255,255,255,.2);
+            padding: 4px 12px;
+            border-radius: 999px;
+            font-size: 13px;
+        }
+        .container { max-width: 1280px; margin: 24px auto; padding: 0 24px; display: grid; grid-template-columns: 1fr 400px; gap: 20px; }
+        .card { background: #fff; border-radius: 12px; padding: 20px; box-shadow: 0 1px 4px rgba(0,0,0,.08); margin-bottom: 20px; }
+        .card h3 { font-size: 16px; margin-bottom: 12px; color: #115e59; border-left: 4px solid #0f766e; padding-left: 10px; }
+        label { display: block; font-size: 12px; color: #6b7280; margin: 8px 0 4px; }
+        input, select, textarea {
+            width: 100%; padding: 9px 12px; border: 1px solid #d1d5db; border-radius: 8px;
+            font-size: 14px; outline: none; transition: border .2s;
+        }
+        input:focus, select:focus, textarea:focus { border-color: #0f766e; box-shadow: 0 0 0 3px rgba(15,118,110,.1); }
+        textarea { resize: vertical; min-height: 60px; }
+        .btn {
+            margin-top: 10px; padding: 9px 18px; border: none; border-radius: 8px; cursor: pointer;
+            font-size: 14px; font-weight: 600; background: #0f766e; color: #fff; transition: background .2s;
+        }
+        .btn:hover { background: #115e59; }
+        .btn.secondary { background: #6b7280; }
+        .btn.secondary:hover { background: #4b5563; }
+        .btn.small { padding: 4px 10px; font-size: 12px; margin-top: 0; }
+
+        #chatBox {
+            height: 380px; border: 1px solid #e5e7eb; border-radius: 10px; padding: 14px;
+            overflow-y: auto; background: #fafbfc; margin-bottom: 12px; font-size: 14px; line-height: 1.7;
+        }
+        .msg { margin-bottom: 12px; display: flex; }
+        .msg .avatar { width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 14px; color: #fff; }
+        .msg.user { flex-direction: row-reverse; }
+        .msg.user .avatar { background: #2563eb; }
+        .msg.ai .avatar { background: #0f766e; }
+        .msg .bubble { max-width: 80%; padding: 10px 14px; border-radius: 12px; }
+        .msg.user .bubble { background: #2563eb; color: #fff; border-top-right-radius: 2px; }
+        .msg.ai .bubble { background: #fff; border: 1px solid #e5e7eb; border-top-left-radius: 2px; }
+        .msg .bubble pre { white-space: pre-wrap; word-break: break-word; font-family: inherit; }
+        .msg.error .bubble { color: #dc2626; }
+
+        .search-bar { display: flex; gap: 8px; margin-bottom: 12px; }
+        .table-wrap { max-height: 220px; overflow-y: auto; }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        th, td { padding: 8px 10px; text-align: left; border-bottom: 1px solid #f0f0f0; }
+        th { background: #f8fafc; color: #374151; position: sticky; top: 0; }
+        .tag { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 12px; background: #e0f2f1; color: #115e59; }
+        .tag.blue { background: #dbeafe; color: #1d4ed8; }
+        .empty { color: #9ca3af; text-align: center; padding: 20px 0; font-size: 13px; }
+        .loading { color: #6b7280; font-size: 13px; padding: 8px 0; }
+        .toast {
+            position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+            background: #111827; color: #fff; padding: 10px 20px; border-radius: 8px;
+            font-size: 14px; z-index: 999; display: none; box-shadow: 0 4px 16px rgba(0,0,0,.2);
+        }
+        .toast.success { background: #059669; }
+        .toast.error { background: #dc2626; }
+        @media (max-width: 960px) { .container { grid-template-columns: 1fr; } }
+    </style>
+</head>
+<body>
+<div class="header">
+    <h1>🏓 乒乓龙 · 乒乓球智能体助手</h1>
+    <span class="badge">RAG + Agent · Hybrid 检索</span>
+</div>
+
+<div class="container">
+    <!-- 左栏：聊天 -->
+    <div>
+        <div class="card">
+            <h3>对话问答（Agent 自动选择工具）</h3>
+            <div id="chatBox"></div>
+            <div style="display:flex; gap:8px;">
+                <input id="question" placeholder="试试问：张三的打法是什么 / 我和李四的开球网比赛 / 长胶怎么应对" onkeydown="if(event.key==='Enter')sendChat()">
+                <button class="btn" onclick="sendChat()">发送</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 右栏：数据管理 -->
+    <div>
+        <div class="card">
+            <h3>新增选手档案</h3>
+            <label>姓名</label>
+            <input id="pName" placeholder="如：张三">
+            <label>持拍</label>
+            <select id="pHand"><option value="">请选择</option><option>左手</option><option>右手</option></select>
+            <label>握拍</label>
+            <select id="pGrip"><option value="">请选择</option><option>直拍</option><option>横拍</option></select>
+            <label>打法</label>
+            <select id="pStyle"><option value="">请选择</option><option>反胶</option><option>长胶</option><option>生胶</option><option>推挡</option><option>防弧</option></select>
+            <button class="btn" onclick="savePlayer()">保存选手</button>
+        </div>
+
+        <div class="card">
+            <h3>选手列表</h3>
+            <div class="search-bar">
+                <input id="playerSearch" placeholder="搜索姓名…" oninput="renderPlayers()">
+            </div>
+            <div class="table-wrap">
+                <table>
+                    <thead><tr><th>姓名</th><th>持拍</th><th>握拍</th><th>打法</th></tr></thead>
+                    <tbody id="playerBody"><tr><td colspan="4" class="loading">加载中…</td></tr></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3>新增比赛记录</h3>
+            <label>对手姓名</label>
+            <input id="mOpponent" placeholder="如：李四">
+            <label>比赛日期</label>
+            <input id="mDate" type="date">
+            <label>比赛类型</label>
+            <select id="mType"><option value="">请选择</option><option>开球网</option><option>私下交流</option><option>大型比赛</option></select>
+            <label>比分（我方在前）</label>
+            <select id="mScore"><option value="">请选择</option><option>2-0</option><option>3-0</option><option>3-1</option><option>3-2</option></select>
+            <label>备注（可选）</label>
+            <textarea id="mNote" placeholder="关键心得、技战术要点…"></textarea>
+            <button class="btn" onclick="saveMatch()">保存比赛记录</button>
+        </div>
+
+        <div class="card">
+            <h3>比赛记录</h3>
+            <div class="search-bar">
+                <input id="matchSearch" placeholder="搜索对手…" oninput="renderMatches()">
+            </div>
+            <div class="table-wrap">
+                <table>
+                    <thead><tr><th>对手</th><th>日期</th><th>类型</th><th>比分</th></tr></thead>
+                    <tbody id="matchBody"><tr><td colspan="4" class="loading">加载中…</td></tr></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3>知识库文档上传（txt/md → 切片向量化 → ES）</h3>
+            <input id="fileInput" type="file" accept=".txt,.md">
+            <button class="btn" onclick="uploadFile()">上传并入库</button>
+        </div>
+    </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const baseUrl = "http://localhost:8080/api";
+
+function toast(msg, type) {
+    const t = document.getElementById("toast");
+    t.textContent = msg;
+    t.className = "toast " + (type || "success");
+    t.style.display = "block";
+    setTimeout(() => { t.style.display = "none"; }, 3000);
+}
+
+// ---------- 聊天 ----------
+let chatBox = document.getElementById("chatBox");
+function appendMsg(role, text) {
+    const div = document.createElement("div");
+    div.className = "msg " + role;
+    const avatar = role === "user" ? "我" : "AI";
+    div.innerHTML = `<div class="avatar">${avatar}</div><div class="bubble"><pre>${escapeHtml(text)}</pre></div>`;
+    chatBox.appendChild(div);
+    chatBox.scrollTop = chatBox.scrollHeight;
+}
+function escapeHtml(s) {
+    return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+async function sendChat() {
+    const q = document.getElementById("question").value.trim();
+    if (!q) return;
+    appendMsg("user", q);
+    document.getElementById("question").value = "";
+    appendMsg("ai", "思考中…");
+    try {
+        const res = await fetch(`${baseUrl}/chat/ask`, {
+            method: "POST",
+            headers: { "Content-Type": "text/plain" },
+            body: q
+        });
+        const text = await res.text();
+        chatBox.lastChild.remove();
+        appendMsg("ai", text);
+    } catch (e) {
+        chatBox.lastChild.remove();
+        appendMsg("ai", "请求失败：" + e.message + "（请确认后端已启动）");
+    }
+}
+
+// ---------- 选手 ----------
+async function savePlayer() {
+    const data = {
+        playerName: document.getElementById("pName").value.trim(),
+        handType: document.getElementById("pHand").value,
+        gripType: document.getElementById("pGrip").value,
+        playStyle: document.getElementById("pStyle").value
+    };
+    if (!data.playerName) return toast("请填写姓名", "error");
+    try {
+        const res = await fetch(`${baseUrl}/player/save`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(data)
+        });
+        if (!res.ok) throw new Error("保存失败");
+        toast("选手已保存");
+        ["pName","pHand","pGrip","pStyle"].forEach(id => document.getElementById(id).value = "");
+        loadPlayers();
+    } catch (e) { toast(e.message, "error"); }
+}
+
+let allPlayers = [];
+async function loadPlayers() {
+    try {
+        const res = await fetch(`${baseUrl}/player/list`);
+        allPlayers = await res.json();
+        renderPlayers();
+    } catch (e) { document.getElementById("playerBody").innerHTML = `<tr><td colspan="4" class="empty">加载失败</td></tr>`; }
+}
+function renderPlayers() {
+    const kw = document.getElementById("playerSearch").value.trim();
+    const list = allPlayers.filter(p => !kw || (p.playerName || "").includes(kw));
+    const body = document.getElementById("playerBody");
+    if (!list.length) { body.innerHTML = `<tr><td colspan="4" class="empty">暂无选手数据</td></tr>`; return; }
+    body.innerHTML = list.map(p => `
+        <tr>
+            <td>${p.playerName || '-'}</td>
+            <td>${p.handType || '-'}</td>
+            <td>${p.gripType || '-'}</td>
+            <td><span class="tag">${p.playStyle || '-'}</span></td>
+        </tr>`).join("");
+}
+
+// ---------- 比赛 ----------
+async function saveMatch() {
+    const data = {
+        opponentName: document.getElementById("mOpponent").value.trim(),
+        matchDate: document.getElementById("mDate").value,
+        matchType: document.getElementById("mType").value,
+        matchScore: document.getElementById("mScore").value,
+        matchNote: document.getElementById("mNote").value.trim()
+    };
+    if (!data.opponentName || !data.matchDate || !data.matchType || !data.matchScore)
+        return toast("请完整填写对手、日期、类型、比分", "error");
+    try {
+        const res = await fetch(`${baseUrl}/match/save`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(data)
+        });
+        if (!res.ok) throw new Error("保存失败");
+        toast("比赛记录已保存");
+        ["mOpponent","mDate","mType","mScore","mNote"].forEach(id => document.getElementById(id).value = "");
+        loadMatches();
+    } catch (e) { toast(e.message, "error"); }
+}
+
+let allMatches = [];
+async function loadMatches() {
+    try {
+        const res = await fetch(`${baseUrl}/match/list`);
+        allMatches = await res.json();
+        renderMatches();
+    } catch (e) { document.getElementById("matchBody").innerHTML = `<tr><td colspan="4" class="empty">加载失败</td></tr>`; }
+}
+function renderMatches() {
+    const kw = document.getElementById("matchSearch").value.trim();
+    const list = allMatches.filter(m => !kw || (m.opponentName || "").includes(kw));
+    const body = document.getElementById("matchBody");
+    if (!list.length) { body.innerHTML = `<tr><td colspan="4" class="empty">暂无比赛记录</td></tr>`; return; }
+    body.innerHTML = list.map(m => `
+        <tr>
+            <td>${m.opponentName || '-'}</td>
+            <td>${m.matchDate || '-'}</td>
+            <td><span class="tag blue">${m.matchType || '-'}</span></td>
+            <td>${m.matchScore || '-'}</td>
+        </tr>`).join("");
+}
+
+// ---------- 文档上传 ----------
+async function uploadFile() {
+    const file = document.getElementById("fileInput").files[0];
+    if (!file) return toast("请先选择文件", "error");
+    const fd = new FormData();
+    fd.append("file", file);
+    try {
+        const res = await fetch(`${baseUrl}/doc/upload`, { method: "POST", body: fd });
+        const text = await res.text();
+        text.startsWith("success") ? toast(text) : toast(text, "error");
+    } catch (e) { toast(e.message, "error"); }
+}
+
+// 初始化
+loadPlayers();
+loadMatches();
+</script>
+</body>
+</html>
