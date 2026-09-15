@@ -1,5 +1,5 @@
 <template>
-  <el-card shadow="never">
+  <el-card shadow="never" class="chat-card">
     <template #header>
       <div class="card-title">
         <el-icon><ChatDotRound /></el-icon>
@@ -7,25 +7,27 @@
       </div>
     </template>
 
-    <div ref="chatBox" class="chat-box">
-      <div v-for="(m, i) in messages" :key="i" class="msg" :class="m.role">
-        <div class="avatar">{{ m.role === 'user' ? '我' : 'AI' }}</div>
-        <div class="bubble" v-html="renderMarkdown(m.content)"></div>
+    <div class="chat-wrap">
+      <div ref="chatBox" class="chat-box">
+        <div v-for="(m, i) in messages" :key="i" class="msg" :class="m.role">
+          <div class="avatar">{{ m.role === 'user' ? '我' : 'AI' }}</div>
+          <div class="bubble" v-html="renderMarkdown(m.content)"></div>
+        </div>
+        <el-empty v-if="!messages.length" description="问点什么吧，例如：张三的打法是什么" :image-size="60" />
       </div>
-      <el-empty v-if="!messages.length" description="问点什么吧，例如：张三的打法是什么" :image-size="60" />
-    </div>
 
-    <div class="input-row">
-      <el-input
-        v-model="question"
-        placeholder="试试问：张三的打法 / 我和李四的开球网比赛 / 长胶怎么应对"
-        clearable
-        @keyup.enter="send"
-      />
-      <el-button type="primary" :loading="loading" @click="send">发送</el-button>
-    </div>
-    <div class="suggest">
-      <el-tag v-for="s in suggests" :key="s" size="small" class="suggest-tag" @click="fill(s)">{{ s }}</el-tag>
+      <div class="input-row">
+        <el-input
+          v-model="question"
+          placeholder="试试问：张三的打法 / 我和李四的比赛 / 长胶怎么应对"
+          clearable
+          @keyup.enter="send"
+        />
+        <el-button type="primary" :loading="loading" @click="send">发送</el-button>
+      </div>
+      <div class="suggest">
+        <el-tag v-for="s in suggests" :key="s" size="small" class="suggest-tag" @click="fill(s)">{{ s }}</el-tag>
+      </div>
     </div>
   </el-card>
 </template>
@@ -45,7 +47,6 @@ function escapeHtml(s) {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
 function renderMarkdown(s) {
-  // 简易渲染：标题/粗体/列表/换行 → HTML
   let html = escapeHtml(s || '')
   html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
   html = html.replace(/^### (.*)$/gm, '<div class="md-h3">$1</div>')
@@ -84,8 +85,11 @@ function scrollToBottom() {
 </script>
 
 <style scoped>
+.chat-card { height: 100%; display: flex; flex-direction: column; border-radius: 12px; }
+.chat-card :deep(.el-card__body) { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.chat-wrap { flex: 1; display: flex; flex-direction: column; min-height: 0; }
 .chat-box {
-  height: 420px; overflow-y: auto; padding: 10px 4px;
+  flex: 1; min-height: 0; overflow-y: auto; padding: 10px 4px;
   background: #fafbfc; border: 1px solid #e5e7eb; border-radius: 10px;
   margin-bottom: 12px;
 }

@@ -1,13 +1,6 @@
 <template>
-  <el-card shadow="never">
-    <template #header>
-      <div class="card-title">
-        <el-icon><FolderOpened /></el-icon>
-        <span>知识库文档（文件 / 文本 → 切片向量化 → ES）</span>
-      </div>
-    </template>
-
-    <el-tabs v-model="activeTab">
+  <div class="panel">
+    <el-tabs v-model="activeTab" size="small">
       <!-- Tab 1：文件上传 -->
       <el-tab-pane label="文件上传" name="file">
         <el-upload
@@ -18,21 +11,20 @@
           :on-change="onFileChange"
           :on-remove="() => file = null"
           drag
+          style="margin-bottom:10px"
         >
           <el-icon class="upload-icon"><UploadFilled /></el-icon>
-          <div>拖拽文件到此处，或点击选择</div>
+          <div>拖拽 / 点击选择文件</div>
           <template #tip>
-            <div class="el-upload__tip">支持 txt / md / pdf / docx，上传后自动解析文本、切片并向量化入库（扫描版 PDF 暂不支持）</div>
+            <div class="el-upload__tip">txt / md / pdf / docx，自动解析切片向量化</div>
           </template>
         </el-upload>
-        <el-button type="primary" :loading="uploading" style="margin-top:12px" @click="upload">
-          上传并入库
-        </el-button>
+        <el-button type="primary" size="default" :loading="uploading" @click="upload">上传并入库</el-button>
       </el-tab-pane>
 
       <!-- Tab 2：文本录入 -->
       <el-tab-pane label="文本录入" name="text">
-        <el-form label-position="top" size="default">
+        <el-form label-position="top" size="small">
           <el-form-item label="标题">
             <el-input v-model="textForm.title" placeholder="如：长胶应对心得" />
           </el-form-item>
@@ -40,28 +32,35 @@
             <el-input
               v-model="textForm.content"
               type="textarea"
-              :rows="8"
-              placeholder="直接粘贴或输入乒乓球相关知识、心得、战术笔记…"
+              :rows="5"
+              placeholder="粘贴或输入乒乓球知识、战术笔记…"
             />
           </el-form-item>
-          <el-button type="primary" :loading="uploading" @click="uploadText">
-            提交入库
-          </el-button>
+          <el-button type="primary" size="default" :loading="uploading" @click="uploadText">提交入库</el-button>
         </el-form>
       </el-tab-pane>
     </el-tabs>
 
-    <el-divider />
-    <el-table :data="docs" size="small" max-height="200">
-      <el-table-column prop="docName" label="文档" show-overflow-tooltip />
-      <el-table-column label="状态" width="80">
-        <template #default="{ row }">
-          <el-tag size="small" :type="statusType(row.status)">{{ statusText(row.status) }}</el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column prop="chunkCount" label="切片数" width="70" />
-    </el-table>
-  </el-card>
+    <el-divider style="margin:10px 0" />
+    <el-button size="default" @click="openList">查看文档库</el-button>
+
+    <!-- 悬浮查看文档列表 -->
+    <el-dialog v-model="listVisible" title="知识库文档" width="560px" append-to-body>
+      <el-table :data="docs" size="small" max-height="320">
+        <el-table-column prop="docName" label="文档" show-overflow-tooltip />
+        <el-table-column prop="docType" label="类型" width="70" />
+        <el-table-column label="状态" width="80">
+          <template #default="{ row }">
+            <el-tag size="small" :type="statusType(row.status)">{{ statusText(row.status) }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="chunkCount" label="切片数" width="70" />
+      </el-table>
+      <template #footer>
+        <el-button @click="listVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
+  </div>
 </template>
 
 <script setup>
@@ -73,6 +72,7 @@ const activeTab = ref('file')
 const file = ref(null)
 const uploading = ref(false)
 const docs = ref([])
+const listVisible = ref(false)
 const textForm = reactive({ title: '', content: '' })
 
 function onFileChange(f) { file.value = f.raw }
@@ -83,6 +83,11 @@ async function load() {
   try {
     docs.value = (await listDocs()).data
   } catch (e) { /* 静默 */ }
+}
+
+function openList() {
+  load()
+  listVisible.value = true
 }
 
 async function upload() {
@@ -120,5 +125,5 @@ onMounted(load)
 </script>
 
 <style scoped>
-.upload-icon { font-size: 40px; color: #0f766e; margin-bottom: 8px; }
+.upload-icon { font-size: 32px; color: #0f766e; margin-bottom: 6px; }
 </style>
