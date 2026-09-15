@@ -3,7 +3,9 @@ package com.tabletennis.rag.controller;
 import com.tabletennis.rag.entity.TtKnowledgeDoc;
 import com.tabletennis.rag.kafka.DocUploadMessage;
 import com.tabletennis.rag.kafka.DocUploadProducer;
+import com.tabletennis.rag.rag.HybridRAGService;
 import com.tabletennis.rag.repository.TtKnowledgeDocRepository;
+import com.tabletennis.rag.service.DocParserService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
@@ -17,10 +19,12 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * 知识库文档上传（Kafka 两阶段异步流水线）：
- * - /upload     文件上传：落盘 → 元数据(处理中) → 发 doc-upload → 消费端解析/切片/向量化/索引
- * - /uploadText 文本录入：元数据(处理中) → 发 doc-upload → 消费端切片/向量化/索引
- * 消费失败自动重试 3 次，仍失败进入 doc-upload-dlq 死信队列并标记失败
+ * 知识库文档上传，支持两种处理模式（前端可切换对比）：
+ *
+ * 1. 同步模式（sync=true）：接口内直接 解析→切片→向量化→索引，返回时已入库
+ * 2. Kafka 异步模式（sync=false，默认）：
+ *    落盘/文本 → 元数据(处理中) → 发 doc-upload topic
+ *    → 消费端解析/切片/向量化/索引；失败重试 3 次，仍失败进 doc-upload-dlq 死信队列
  */
 @Slf4j
 @RestController
@@ -32,9 +36,12 @@ public class DocUploadController {
 
     private final DocUploadProducer producer;
     private final TtKnowledgeDocRepository docRepo;
+    private final DocParserService docParserService;
+    private final HybridRAGService hybridRAGService;
 
     @PostMapping("/upload")
-    public String uploadDoc(@RequestParam("file") MultipartFile file) {
+    public String uploadDoc(@RequestParam("file") MultipartFile file,
+                            @RequestParam(value = "sync", defaultValue = "false") boolean sync) {
         if (file == null || file.isEmpty()) {
             return "fail: 文件为空";
         }
@@ -43,7 +50,7 @@ public class DocUploadController {
         String ext = fileName == null ? "unknown"
                 : fileName.contains(".") ? fileName.substring(fileName.lastIndexOf('.') + 1) : "unknown";
         try {
-            // 1. 文件落盘（消费端解析）
+            // 1. 文件落盘（异步模式由消费端解析，同步模式此处直接解析）
             Path targetDir = Path.of(UPLOAD_DIR, docId);
             Files.createDirectories(targetDir);
             Path targetFile = targetDir.resolve(sanitize(fileName));
@@ -54,7 +61,20 @@ public class DocUploadController {
             meta.setStatus(1);
             docRepo.save(meta);
 
-            // 3. 提交 Kafka 异步流水线
+            if (sync) {
+                // 同步模式：直接解析→切片→向量化→ES 索引
+                String content = docParserService.parseFile(targetFile.toString());
+                if (content == null || content.isBlank()) {
+                    throw new RuntimeException("未能从文件中提取到文本内容");
+                }
+                int chunkCount = hybridRAGService.insertDoc(docId, fileName, content, "upload");
+                meta.setStatus(2);
+                meta.setChunkCount(chunkCount);
+                docRepo.save(meta);
+                return "success: 已同步入库，切片数=" + chunkCount;
+            }
+
+            // 3. Kafka 异步流水线
             DocUploadMessage message = new DocUploadMessage();
             message.setDocId(docId);
             message.setFileName(fileName);
@@ -63,8 +83,13 @@ public class DocUploadController {
             producer.send(message);
 
             return "success: 已提交异步处理，切片与向量化后台进行中…";
-        } catch (IOException e) {
-            log.error("文件上传失败", e);
+        } catch (Exception e) {
+            log.error("文件处理失败", e);
+            docRepo.findByDocId(docId).ifPresent(m -> {
+                m.setStatus(3);
+                m.setFailMsg(e.getMessage());
+                docRepo.save(m);
+            });
             return "fail: " + e.getMessage();
         }
     }
@@ -73,6 +98,7 @@ public class DocUploadController {
     public String uploadText(@RequestBody Map<String, String> body) {
         String title = body.get("title");
         String content = body.get("content");
+        boolean sync = "true".equalsIgnoreCase(body.getOrDefault("sync", "false"));
         if (title == null || title.isBlank()) {
             return "fail: 请填写标题";
         }
@@ -84,6 +110,24 @@ public class DocUploadController {
         meta.setStatus(1);
         docRepo.save(meta);
 
+        if (sync) {
+            // 同步模式：直接切片→向量化→ES 索引
+            try {
+                int chunkCount = hybridRAGService.insertDoc(docId, title, content, "manual");
+                meta.setStatus(2);
+                meta.setChunkCount(chunkCount);
+                docRepo.save(meta);
+                return "success: 已同步入库，切片数=" + chunkCount;
+            } catch (Exception e) {
+                log.error("文本处理失败", e);
+                meta.setStatus(3);
+                meta.setFailMsg(e.getMessage());
+                docRepo.save(meta);
+                return "fail: " + e.getMessage();
+            }
+        }
+
+        // Kafka 异步流水线
         DocUploadMessage message = new DocUploadMessage();
         message.setDocId(docId);
         message.setFileName(title);

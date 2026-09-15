@@ -21,10 +21,11 @@ export const saveMatch = (data) => api.post('/match/save', data)
 export const listMatches = () => api.get('/match/list')
 
 // 知识库文档
-export const uploadDoc = (file) => {
+export const uploadDoc = (file, sync) => {
   const fd = new FormData()
   fd.append('file', file)
+  fd.append('sync', sync)
   return api.post('/doc/upload', fd)
 }
-export const uploadText = (data) => api.post('/doc/uploadText', data)
+export const uploadText = (data, sync) => api.post('/doc/uploadText', { ...data, sync })
 export const listDocs = () => api.get('/doc/list')

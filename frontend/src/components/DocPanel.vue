@@ -1,5 +1,17 @@
 <template>
   <div class="panel">
+    <!-- 处理模式切换：同步 vs Kafka 异步 -->
+    <div class="mode-row">
+      <span class="mode-label">入库方式</span>
+      <el-radio-group v-model="asyncMode" size="small">
+        <el-radio-button :value="false">同步入库</el-radio-button>
+        <el-radio-button :value="true">Kafka 异步</el-radio-button>
+      </el-radio-group>
+      <el-tooltip placement="top" :content="asyncMode ? '接口立即返回，解析→切片→向量化→ES索引在消费端异步完成（可重试/死信队列）' : '接口内直接完成 解析→切片→向量化→ES索引，返回时已入库'" >
+        <el-icon class="tip-icon"><QuestionFilled /></el-icon>
+      </el-tooltip>
+    </div>
+
     <el-tabs v-model="activeTab" size="small">
       <!-- Tab 1：文件上传 -->
       <el-tab-pane label="文件上传" name="file">
@@ -69,6 +81,7 @@ import { ElMessage } from 'element-plus'
 import { uploadDoc, uploadText as uploadTextApi, listDocs } from '../api'
 
 const activeTab = ref('file')
+const asyncMode = ref(true)
 const file = ref(null)
 const uploading = ref(false)
 const docs = ref([])
@@ -107,10 +120,16 @@ async function upload() {
   if (!file.value) return ElMessage.warning('请先选择文件')
   uploading.value = true
   try {
-    const res = await uploadDoc(file.value)
-    ElMessage.info(res.data)
-    file.value = null
-    startPolling()
+    const res = await uploadDoc(file.value, asyncMode.value)
+    if (asyncMode.value) {
+      ElMessage.info(res.data)
+      file.value = null
+      startPolling()
+    } else {
+      ElMessage.success(res.data)
+      file.value = null
+      load()
+    }
   } catch (e) {
     ElMessage.error('上传失败：' + (e.message || e))
   } finally {
@@ -123,10 +142,16 @@ async function uploadText() {
   if (!textForm.content.trim()) return ElMessage.warning('请填写知识内容')
   uploading.value = true
   try {
-    const res = await uploadTextApi({ title: textForm.title.trim(), content: textForm.content.trim() })
-    ElMessage.info(res.data)
-    textForm.title = textForm.content = ''
-    startPolling()
+    const res = await uploadTextApi({ title: textForm.title.trim(), content: textForm.content.trim() }, asyncMode.value)
+    if (asyncMode.value) {
+      ElMessage.info(res.data)
+      textForm.title = textForm.content = ''
+      startPolling()
+    } else {
+      ElMessage.success(res.data)
+      textForm.title = textForm.content = ''
+      load()
+    }
   } catch (e) {
     ElMessage.error('提交失败：' + (e.message || e))
   } finally {
@@ -140,4 +165,7 @@ onBeforeUnmount(stopPolling)
 
 <style scoped>
 .upload-icon { font-size: 32px; color: #0f766e; margin-bottom: 6px; }
+.mode-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.mode-label { font-size: 13px; color: #475569; }
+.tip-icon { color: #94a3b8; cursor: help; }
 </style>
