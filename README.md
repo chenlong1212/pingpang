@@ -85,7 +85,8 @@ open http://localhost:5173
 | GET | /api/player/list | 选手列表 |
 | POST | /api/match/save | 保存比赛记录 |
 | GET | /api/match/list | 比赛列表 |
-| POST | /api/doc/upload | 上传知识库文档（multipart） |
+| POST | /api/doc/upload | 上传知识库文档（multipart，支持 txt/md/pdf/docx，Tika 解析） |
+| POST | /api/doc/uploadText | 手动文本录入（JSON：title + content） |
 | GET | /api/doc/list | 文档元数据列表 |
 
 > 前端通过 Vite 代理访问 `/api`（开发模式 5173 → 8080），生产构建时可让后端托管 `frontend/dist`。

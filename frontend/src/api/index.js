@@ -26,4 +26,5 @@ export const uploadDoc = (file) => {
   fd.append('file', file)
   return api.post('/doc/upload', fd)
 }
+export const uploadText = (data) => api.post('/doc/uploadText', data)
 export const listDocs = () => api.get('/doc/list')
