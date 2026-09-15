@@ -23,4 +23,15 @@ public class TtKnowledgeDoc {
 
     private LocalDateTime createTime;
     private LocalDateTime updateTime;
+
+    @PrePersist
+    void onCreate() {
+        this.createTime = LocalDateTime.now();
+        this.updateTime = LocalDateTime.now();
+    }
+
+    @PreUpdate
+    void onUpdate() {
+        this.updateTime = LocalDateTime.now();
+    }
 }

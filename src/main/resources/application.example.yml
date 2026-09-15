@@ -20,6 +20,23 @@ spring:
   elasticsearch:
     uris: http://127.0.0.1:9200
 
+  kafka:
+    bootstrap-servers: 127.0.0.1:9092
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+    consumer:
+      group-id: doc-pipeline-group
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "*"
+        spring.json.value.default.type: com.tabletennis.rag.kafka.DocUploadMessage
+    listener:
+      ack-mode: manual_immediate
+
   # ⚠️ 使用前请将本文件复制为 application.yml，并填入你的真实 API Key
   ai:
     openai:
@@ -35,3 +52,9 @@ spring:
         options:
           model: BAAI/bge-m3
           # 注意：bge-m3 固定1024维，不接受 dimensions 参数，不要在这里配置
+
+# Reranker 重排模型（硅基流动，OpenAI 兼容 /v1/rerank）
+rerank:
+  base-url: https://api.siliconflow.cn
+  api-key: YOUR_SILICONFLOW_API_KEY
+  model: BAAI/bge-reranker-v2-m3

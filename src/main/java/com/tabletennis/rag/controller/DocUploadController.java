@@ -1,37 +1,37 @@
 package com.tabletennis.rag.controller;
 
 import com.tabletennis.rag.entity.TtKnowledgeDoc;
-import com.tabletennis.rag.rag.HybridRAGService;
+import com.tabletennis.rag.kafka.DocUploadMessage;
+import com.tabletennis.rag.kafka.DocUploadProducer;
 import com.tabletennis.rag.repository.TtKnowledgeDocRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.tika.metadata.Metadata;
-import org.apache.tika.metadata.TikaCoreProperties;
-import org.apache.tika.parser.AutoDetectParser;
-import org.apache.tika.parser.ParseContext;
-import org.apache.tika.sax.BodyContentHandler;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
 /**
- * 知识库文档上传：
- * - /upload     文件上传（Tika 自动解析 txt/md/pdf/word 等文本类文档）→ 切片向量化 → ES 入库
- * - /uploadText 手动文本录入 → 切片向量化 → ES 入库
- * （同步版实现，Kafka 异步流水线为简历描述项，后续可替换）
+ * 知识库文档上传（Kafka 两阶段异步流水线）：
+ * - /upload     文件上传：落盘 → 元数据(处理中) → 发 doc-upload → 消费端解析/切片/向量化/索引
+ * - /uploadText 文本录入：元数据(处理中) → 发 doc-upload → 消费端切片/向量化/索引
+ * 消费失败自动重试 3 次，仍失败进入 doc-upload-dlq 死信队列并标记失败
  */
 @Slf4j
 @RestController
 @RequestMapping("/api/doc")
 @RequiredArgsConstructor
 public class DocUploadController {
-    private final HybridRAGService hybridRAGService;
-    private final TtKnowledgeDocRepository docRepo;
+    private static final String UPLOAD_DIR = "data/uploads";
+    private static final String ES_INDEX = "table_tennis_knowledge";
 
-    private final AutoDetectParser tikaParser = new AutoDetectParser();
+    private final DocUploadProducer producer;
+    private final TtKnowledgeDocRepository docRepo;
 
     @PostMapping("/upload")
     public String uploadDoc(@RequestParam("file") MultipartFile file) {
@@ -42,24 +42,29 @@ public class DocUploadController {
         String fileName = file.getOriginalFilename();
         String ext = fileName == null ? "unknown"
                 : fileName.contains(".") ? fileName.substring(fileName.lastIndexOf('.') + 1) : "unknown";
-
-        TtKnowledgeDoc meta = newMeta(docId, fileName, ext, "upload");
         try {
-            // Tika 自动检测并解析：txt/md/pdf/docx 等文本类文档
-            String content = parseToText(file);
-            if (content == null || content.isBlank()) {
-                throw new RuntimeException("未能从文件中提取到文本内容（扫描版 PDF 需 OCR，暂不支持）");
-            }
-            int chunkCount = hybridRAGService.insertDoc(docId, fileName, content, "upload");
-            meta.setStatus(2);
-            meta.setChunkCount(chunkCount);
+            // 1. 文件落盘（消费端解析）
+            Path targetDir = Path.of(UPLOAD_DIR, docId);
+            Files.createDirectories(targetDir);
+            Path targetFile = targetDir.resolve(sanitize(fileName));
+            file.transferTo(targetFile);
+
+            // 2. 元数据：处理中
+            TtKnowledgeDoc meta = newMeta(docId, fileName, ext, targetFile.toString());
+            meta.setStatus(1);
             docRepo.save(meta);
-            return "success: 已入库，切片数=" + chunkCount;
-        } catch (Exception e) {
-            log.error("文档上传失败", e);
-            meta.setStatus(3);
-            meta.setFailMsg(e.getMessage());
-            docRepo.save(meta);
+
+            // 3. 提交 Kafka 异步流水线
+            DocUploadMessage message = new DocUploadMessage();
+            message.setDocId(docId);
+            message.setFileName(fileName);
+            message.setFilePath(targetFile.toString());
+            message.setSource("upload");
+            producer.send(message);
+
+            return "success: 已提交异步处理，切片与向量化后台进行中…";
+        } catch (IOException e) {
+            log.error("文件上传失败", e);
             return "fail: " + e.getMessage();
         }
     }
@@ -75,20 +80,18 @@ public class DocUploadController {
             return "fail: 内容不能为空";
         }
         String docId = UUID.randomUUID().toString();
-        TtKnowledgeDoc meta = newMeta(docId, title, "text", "manual");
-        try {
-            int chunkCount = hybridRAGService.insertDoc(docId, title, content, "manual");
-            meta.setStatus(2);
-            meta.setChunkCount(chunkCount);
-            docRepo.save(meta);
-            return "success: 已入库，切片数=" + chunkCount;
-        } catch (Exception e) {
-            log.error("文本入库失败", e);
-            meta.setStatus(3);
-            meta.setFailMsg(e.getMessage());
-            docRepo.save(meta);
-            return "fail: " + e.getMessage();
-        }
+        TtKnowledgeDoc meta = newMeta(docId, title, "text", null);
+        meta.setStatus(1);
+        docRepo.save(meta);
+
+        DocUploadMessage message = new DocUploadMessage();
+        message.setDocId(docId);
+        message.setFileName(title);
+        message.setContent(content);
+        message.setSource("manual");
+        producer.send(message);
+
+        return "success: 已提交异步处理，切片与向量化后台进行中…";
     }
 
     @GetMapping("/list")
@@ -96,23 +99,17 @@ public class DocUploadController {
         return docRepo.findAll();
     }
 
-    private TtKnowledgeDoc newMeta(String docId, String name, String type, String source) {
+    private TtKnowledgeDoc newMeta(String docId, String name, String type, String path) {
         TtKnowledgeDoc meta = new TtKnowledgeDoc();
         meta.setDocId(docId);
         meta.setDocName(name);
         meta.setDocType(type);
-        meta.setStatus(1);
-        meta.setEsIndexName("table_tennis_knowledge");
-        return docRepo.save(meta);
+        meta.setDocPath(path);
+        meta.setEsIndexName(ES_INDEX);
+        return meta;
     }
 
-    private String parseToText(MultipartFile file) throws Exception {
-        BodyContentHandler handler = new BodyContentHandler(-1);
-        Metadata metadata = new Metadata();
-        metadata.set(TikaCoreProperties.RESOURCE_NAME_KEY, file.getOriginalFilename());
-        try (var is = file.getInputStream()) {
-            tikaParser.parse(is, handler, metadata, new ParseContext());
-        }
-        return handler.toString();
+    private String sanitize(String name) {
+        return name == null ? "file" : name.replaceAll("[\\\\/:*?\"<>|]", "_");
     }
 }

@@ -15,7 +15,7 @@ import java.util.stream.Collectors;
 /**
  * Hybrid RAG 检索链路：
  * ES IK分词 BM25 稀疏检索 + Dense Vector 向量检索
- * → RRF 融合两路排序结果 → Reranker 重排（预留，可按需接入 bge-reranker）
+ * → RRF 融合两路排序结果 → Reranker（bge-reranker-v2-m3）重排
  */
 @Service
 @Slf4j
@@ -23,6 +23,7 @@ import java.util.stream.Collectors;
 public class HybridRAGService {
     private final ElasticsearchClient esClient;
     private final EmbeddingModel embeddingModel;
+    private final RerankService rerankService;
 
     private static final String INDEX_NAME = "table_tennis_knowledge";
     private static final int RRF_K = 60;
@@ -44,8 +45,8 @@ public class HybridRAGService {
         Map<String, Double> rrfScoreMap = rrfFuse(bm25Result, vectorResult);
         // 4. 转文档块
         List<RetrieveDTO> rawList = convertToChunk(rrfScoreMap, chunkCache);
-        // 5. Reranker 重排（当前为占位，后续可接 BGE-Reranker 或 LLM 打分）
-        return rerank(rawList, query);
+        // 5. Reranker 重排（bge-reranker-v2-m3 按相关性打分，失败自动降级）
+        return rerankService.rerank(rawList, query);
     }
 
     private Map<String, Double> bm25Search(String queryText, Map<String, KnowledgeChunk> cache) {
@@ -128,10 +129,6 @@ public class HybridRAGService {
             list.add(dto);
         }
         return list;
-    }
-
-    private List<RetrieveDTO> rerank(List<RetrieveDTO> chunks, String query) {
-        return chunks;
     }
 
     /**

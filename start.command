@@ -11,7 +11,7 @@ echo "  乒乓龙 · 一键启动"
 echo "=============================================="
 
 # 1. Docker 依赖
-echo "[1/4] 检查 Docker 依赖 (MySQL/Redis/ES)..."
+echo "[1/4] 检查 Docker 依赖 (MySQL/Redis/ES/Kafka)..."
 if ! docker info >/dev/null 2>&1; then
   echo "❌ Docker 未运行，请先启动 Docker Desktop 或 OrbStack 后重试"
   read -r -p "按回车退出..." _
@@ -26,6 +26,12 @@ if curl -sf http://127.0.0.1:9200 >/dev/null 2>&1; then
   echo "   ✅ MySQL/Redis/ES 就绪"
 else
   echo "   ⚠️ ES 未就绪（后端会自动重试，可稍后检查 docker compose ps）"
+fi
+# Kafka 就绪检查（消费者会自动重连，这里仅提示）
+if nc -z 127.0.0.1 9092 2>/dev/null; then
+  echo "   ✅ Kafka 就绪"
+else
+  echo "   ⚠️ Kafka 尚未就绪（后端消费端会自动重连，稍等即可）"
 fi
 
 # 2. 后端

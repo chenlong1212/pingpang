@@ -64,7 +64,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage } from 'element-plus'
 import { uploadDoc, uploadText as uploadTextApi, listDocs } from '../api'
 
@@ -74,6 +74,7 @@ const uploading = ref(false)
 const docs = ref([])
 const listVisible = ref(false)
 const textForm = reactive({ title: '', content: '' })
+let pollTimer = null
 
 function onFileChange(f) { file.value = f.raw }
 function statusText(s) { return ({ 0: '待处理', 1: '处理中', 2: '成功', 3: '失败' })[s] || s }
@@ -83,6 +84,18 @@ async function load() {
   try {
     docs.value = (await listDocs()).data
   } catch (e) { /* 静默 */ }
+}
+
+function startPolling() {
+  stopPolling()
+  pollTimer = setInterval(async () => {
+    await load()
+    const hasPending = docs.value.some(d => d.status === 1)
+    if (!hasPending) stopPolling()
+  }, 3000)
+}
+function stopPolling() {
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null }
 }
 
 function openList() {
@@ -95,9 +108,9 @@ async function upload() {
   uploading.value = true
   try {
     const res = await uploadDoc(file.value)
-    ElMessage.success(res.data)
+    ElMessage.info(res.data)
     file.value = null
-    load()
+    startPolling()
   } catch (e) {
     ElMessage.error('上传失败：' + (e.message || e))
   } finally {
@@ -111,9 +124,9 @@ async function uploadText() {
   uploading.value = true
   try {
     const res = await uploadTextApi({ title: textForm.title.trim(), content: textForm.content.trim() })
-    ElMessage.success(res.data)
+    ElMessage.info(res.data)
     textForm.title = textForm.content = ''
-    load()
+    startPolling()
   } catch (e) {
     ElMessage.error('提交失败：' + (e.message || e))
   } finally {
@@ -122,6 +135,7 @@ async function uploadText() {
 }
 
 onMounted(load)
+onBeforeUnmount(stopPolling)
 </script>
 
 <style scoped>

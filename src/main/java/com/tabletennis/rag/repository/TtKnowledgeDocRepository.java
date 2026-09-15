@@ -8,4 +8,5 @@ import java.util.List;
 @Repository
 public interface TtKnowledgeDocRepository extends JpaRepository<TtKnowledgeDoc, Long> {
     List<TtKnowledgeDoc> findByStatus(Integer status);
+    java.util.Optional<TtKnowledgeDoc> findByDocId(String docId);
 }

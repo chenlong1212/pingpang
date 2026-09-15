@@ -6,10 +6,12 @@
 
 - Java 21 + Spring Boot 3.5.7 + Spring AI 1.1.2（GA）
 - MySQL 8（选手档案 / 比赛记录 / 文档元数据，结构化存储）
-- Elasticsearch 7.17（IK 分词 + Dense Vector 双路召回，RRF 融合；客户端 8.18.8 由 Spring Boot 管理）
-- Redis 7（缓存，预留）
+- Elasticsearch 8（IK 分词 + Dense Vector 双路召回，RRF 融合；由 Spring Boot 自动配置）
+- Redis 7（选手/比赛查询缓存，@Cacheable 30 分钟 TTL）
+- Kafka 3.7（两阶段异步文档流水线：解析→切分/向量化→索引，重试 + 死信队列）
 - 对话模型：agnes-2.5-flash（OpenAI 兼容）
 - Embedding：硅基流动 BAAI/bge-m3（1024 维，中文效果好）
+- Reranker：硅基流动 BAAI/bge-reranker-v2-m3（重排优化排序）
 
 ## 目录结构
 
@@ -70,7 +72,7 @@ open http://localhost:5173
 
 - 录入选手档案（姓名 / 左右手 / 直横拍 / 打法）
 - 录入比赛记录（对手 / 日期 / 类型 / 比分）
-- 上传 txt / md 知识库文档，自动切片向量化入库
+- 上传 txt / md / pdf / docx 知识库文档，或手动录入文本，自动切片向量化入库
 - 聊天框提问，Agent 自动选择工具：
   - 「张三的打法是什么」→ 选手档案工具
   - 「我和李四的开球网比赛」→ 比赛记录工具
@@ -95,11 +97,12 @@ open http://localhost:5173
 
 - **双路召回**：ES IK 分词 BM25 稀疏检索 + dense_vector kNN 余弦向量检索
 - **RRF 融合**：两路 top-K 排名按 `1/(K+rank)` 加权融合（K=60）
-- **Reranker**：预留扩展点，可接入 BGE-Reranker 模型
+- **Reranker**：bge-reranker-v2-m3 对 RRF 候选按相关性打分重排（失败自动降级原序）
 - **Agentic 路由**：选手/比赛/知识库三个 @Tool，LLM 自主选择调用，不硬编码路由
 - **Query Rewrite**：口语化问题先经 LLM 改写为标准 Query 并识别意图（player/match/knowledge）
+- **Kafka 异步流水线**：文件上传/文本录入 → `doc-upload` topic → 消费端解析→切片→向量化→ES 索引；失败重试 3 次（指数退避），仍失败进入 `doc-upload-dlq` 死信队列并标记文档失败
 
 ## 说明
 
-- Kafka 异步文档流水线（解析→切分/向量化→索引，重试 + 死信队列）为简历描述项，当前 demo 以同步方式实现文档入库，后续可替换为 Kafka 版。
-- API Key 已配置在 `application.yml`，如更换请同步修改。
+- Kafka 异步文档流水线（解析→切分/向量化→索引，重试 + 死信队列）已实现：上传接口先落盘并提交消息，消费端异步完成解析/切片/向量化/索引，接口即时返回，任务可恢复。
+- API Key 已配置在 `application.yml`（不入库），模板见 `application.example.yml`，如更换请同步修改。
