@@ -8,6 +8,15 @@
     </template>
 
     <div class="chat-wrap">
+      <!-- 会话管理：切换 / 新建 / 删除 -->
+      <div class="session-bar">
+        <el-select v-model="currentSessionId" placeholder="选择会话" size="small" style="flex:1" @change="switchSession">
+          <el-option v-for="s in sessions" :key="s.sessionId" :label="`${s.title}（${fmtTime(s.updatedAt)}）`" :value="s.sessionId" />
+        </el-select>
+        <el-button size="small" type="primary" :icon="Plus" @click="newSession">新建</el-button>
+        <el-button size="small" type="danger" :icon="Delete" :disabled="!sessions.length" @click="removeSession">删除</el-button>
+      </div>
+
       <div ref="chatBox" class="chat-box">
         <div v-for="(m, i) in messages" :key="i" class="msg" :class="m.role">
           <div class="avatar">{{ m.role === 'user' ? '我' : 'AI' }}</div>
@@ -34,8 +43,9 @@
 
 <script setup>
 import { ref, nextTick, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
-import { chatAsk, chatHistory } from '../api'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { Plus, Delete } from '@element-plus/icons-vue'
+import { chatAsk, chatHistory, chatSessions, createSession, deleteSession } from '../api'
 
 const messages = ref([])
 const question = ref('')
@@ -43,9 +53,85 @@ const loading = ref(false)
 const chatBox = ref(null)
 const suggests = ['张三的打法是什么', '我和李四的比赛记录', '长胶怎么应对']
 
-// 会话 ID：localStorage 持久化，刷新页面后多轮记忆仍在
-const sessionId = localStorage.getItem('pp_session_id') || crypto.randomUUID()
-localStorage.setItem('pp_session_id', sessionId)
+// 会话列表 & 当前会话（localStorage 持久化）
+const sessions = ref([])
+const currentSessionId = ref(localStorage.getItem('pp_session_id') || '')
+const persistSession = () => localStorage.setItem('pp_session_id', currentSessionId.value)
+
+function fmtTime(ts) {
+  const d = new Date(ts)
+  const pad = n => String(n).padStart(2, '0')
+  return `${d.getMonth() + 1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+async function refreshSessions() {
+  try {
+    const res = await chatSessions()
+    sessions.value = res.data || []
+    // 若当前会话不在列表（如被删/新建），回落到最近一个
+    if (currentSessionId.value && !sessions.value.find(s => s.sessionId === currentSessionId.value)) {
+      currentSessionId.value = ''
+    }
+    if (!currentSessionId.value && sessions.value.length) {
+      currentSessionId.value = sessions.value[0].sessionId
+      persistSession()
+      await loadHistory()
+    }
+  } catch (e) { /* 后端未启动 */ }
+}
+
+async function loadHistory() {
+  if (!currentSessionId.value) {
+    messages.value = []
+    return
+  }
+  try {
+    const res = await chatHistory(currentSessionId.value)
+    messages.value = (res.data || []).map(m => ({
+      role: m.role === 'user' ? 'user' : 'ai',
+      content: m.content || ''
+    }))
+    scrollToBottom()
+  } catch (e) {
+    messages.value = []
+  }
+}
+
+async function switchSession(id) {
+  currentSessionId.value = id
+  persistSession()
+  await loadHistory()
+}
+
+async function newSession() {
+  try {
+    const res = await createSession({ title: '' })
+    currentSessionId.value = res.data.sessionId
+    persistSession()
+    messages.value = []
+    await refreshSessions()
+    scrollToBottom()
+  } catch (e) {
+    ElMessage.error('新建会话失败：' + (e.message || e))
+  }
+}
+
+async function removeSession() {
+  if (!currentSessionId.value) return
+  try {
+    await ElMessageBox.confirm('删除后该会话的对话记录将无法恢复，确定删除吗？', '删除会话', {
+      type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消'
+    })
+  } catch (e) { return }
+  try {
+    await deleteSession(currentSessionId.value)
+    currentSessionId.value = ''
+    await refreshSessions()
+    ElMessage.success('会话已删除')
+  } catch (e) {
+    ElMessage.error('删除失败：' + (e.message || e))
+  }
+}
 
 function escapeHtml(s) {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -62,33 +148,24 @@ function renderMarkdown(s) {
 
 function fill(s) { question.value = s }
 
-// 刷新后从后端恢复聊天历史
-onMounted(async () => {
-  try {
-    const res = await chatHistory(sessionId)
-    if (Array.isArray(res.data) && res.data.length) {
-      messages.value = res.data.map(m => ({
-        role: m.role === 'user' ? 'user' : 'ai',
-        content: m.content || ''
-      }))
-      scrollToBottom()
-    }
-  } catch (e) {
-    // 后端未启动或首次使用，忽略
-  }
-})
-
 async function send() {
   const q = question.value.trim()
   if (!q || loading.value) return
+  // 没有当前会话（如后端无会话）先自动建一个
+  if (!currentSessionId.value) {
+    const res = await createSession({ title: '' })
+    currentSessionId.value = res.data.sessionId
+    persistSession()
+  }
   messages.value.push({ role: 'user', content: q })
   question.value = ''
   loading.value = true
   messages.value.push({ role: 'ai', content: '思考中…' })
   scrollToBottom()
   try {
-    const res = await chatAsk(sessionId, q)
+    const res = await chatAsk(currentSessionId.value, q)
     messages.value[messages.value.length - 1].content = res.data
+    await refreshSessions() // 更新标题/活跃时间
   } catch (e) {
     messages.value[messages.value.length - 1].content = '请求失败：' + (e.message || e) + '（请确认后端已启动）'
   } finally {
@@ -102,12 +179,18 @@ function scrollToBottom() {
     if (chatBox.value) chatBox.value.scrollTop = chatBox.value.scrollHeight
   })
 }
+
+onMounted(async () => {
+  await refreshSessions()
+  await loadHistory()
+})
 </script>
 
 <style scoped>
 .chat-card { height: 100%; display: flex; flex-direction: column; border-radius: 12px; }
 .chat-card :deep(.el-card__body) { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
 .chat-wrap { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.session-bar { display: flex; gap: 6px; margin-bottom: 10px; align-items: center; }
 .chat-box {
   flex: 1; min-height: 0; overflow-y: auto; padding: 10px 4px;
   background: #fafbfc; border: 1px solid #e5e7eb; border-radius: 10px;

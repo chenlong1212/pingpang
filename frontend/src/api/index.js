@@ -13,6 +13,10 @@ export const chatAsk = (sessionId, question) =>
   })
 // 加载会话历史（刷新后恢复聊天界面）
 export const chatHistory = (sessionId) => api.get('/chat/history', { params: { sessionId } })
+// 会话管理：列表 / 新建 / 删除
+export const chatSessions = () => api.get('/chat/sessions')
+export const createSession = (data) => api.post('/chat/sessions', data)
+export const deleteSession = (sessionId) => api.delete(`/chat/sessions/${sessionId}`)
 
 // 选手
 export const savePlayer = (data) => api.post('/player/save', data)

@@ -1,6 +1,7 @@
 package com.tabletennis.rag.controller;
 
 import com.tabletennis.rag.ai.ChatHistoryService;
+import com.tabletennis.rag.ai.ChatSessionService;
 import com.tabletennis.rag.ai.QueryRewriteService;
 import com.tabletennis.rag.ai.TableTennisTools;
 import lombok.RequiredArgsConstructor;
@@ -10,6 +11,7 @@ import org.springframework.ai.chat.messages.Message;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 @Slf4j
 @RestController
@@ -20,6 +22,28 @@ public class AgentChatController {
     private final TableTennisTools tableTennisTools;
     private final QueryRewriteService queryRewriteService;
     private final ChatHistoryService chatHistoryService;
+    private final ChatSessionService chatSessionService;
+
+    /** 获取全部会话（按最近活跃倒序） */
+    @GetMapping("/sessions")
+    public List<ChatSessionService.SessionInfo> sessions() {
+        return chatSessionService.list();
+    }
+
+    /** 新建会话 */
+    @PostMapping("/sessions")
+    public ChatSessionService.SessionInfo createSession(@RequestBody(required = false) Map<String, String> body) {
+        String title = body == null ? null : body.get("title");
+        return chatSessionService.create(title);
+    }
+
+    /** 删除会话（元数据 + 历史消息联动删除） */
+    @DeleteMapping("/sessions/{sessionId}")
+    public String deleteSession(@PathVariable String sessionId) {
+        chatSessionService.delete(sessionId);
+        chatHistoryService.clear(sessionId);
+        return "会话已删除";
+    }
 
     /** 获取指定会话的历史消息，供前端刷新后恢复聊天界面 */
     @GetMapping("/history")
@@ -66,9 +90,10 @@ public class AgentChatController {
                 .call()
                 .content();
 
-        // 4. 保存本轮对话到 Redis 会话历史
+        // 4. 保存本轮对话到 Redis 会话历史，并刷新会话列表（标题/活跃时间）
         chatHistoryService.append(sessionId, "user", userQuestion);
         chatHistoryService.append(sessionId, "assistant", answer);
+        chatSessionService.touch(sessionId, userQuestion);
         return answer;
     }
 }
