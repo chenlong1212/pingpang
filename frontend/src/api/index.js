@@ -5,11 +5,12 @@ const api = axios.create({
   timeout: 120000
 })
 
-// 聊天（JSON 携带 sessionId 实现多轮会话记忆，返回纯文本）
-export const chatAsk = (sessionId, question) =>
+// 聊天（JSON 携带 sessionId 实现多轮会话记忆，返回纯文本；signal 用于取消进行中的请求）
+export const chatAsk = (sessionId, question, signal) =>
   api.post('/chat/ask', { sessionId, question }, {
     headers: { 'Content-Type': 'application/json' },
-    responseType: 'text'
+    responseType: 'text',
+    signal
   })
 // 加载会话历史（刷新后恢复聊天界面）
 export const chatHistory = (sessionId) => api.get('/chat/history', { params: { sessionId } })

@@ -105,12 +105,23 @@ async function loadHistory() {
 
 async function switchSession(id) {
   if (id === currentSessionId.value) return
+  cancelPending()
   currentSessionId.value = id
   persistSession()
   await loadHistory()
 }
 
+// 取消进行中的请求（切会话/新建时防止旧回复污染当前界面）
+const pendingCtrl = ref(null)
+function cancelPending() {
+  if (pendingCtrl.value) {
+    pendingCtrl.value.abort()
+    pendingCtrl.value = null
+  }
+}
+
 async function newSession() {
+  cancelPending()
   try {
     const res = await createSession({ title: '' })
     currentSessionId.value = res.data.sessionId
@@ -130,6 +141,7 @@ async function removeSession(s) {
     })
   } catch (e) { return }
   try {
+    if (s.sessionId === currentSessionId.value) cancelPending()
     await deleteSession(s.sessionId)
     if (s.sessionId === currentSessionId.value) currentSessionId.value = ''
     await refreshSessions()
@@ -163,20 +175,34 @@ async function send() {
     currentSessionId.value = res.data.sessionId
     persistSession()
   }
+  cancelPending()
+  const ctrl = new AbortController()
+  pendingCtrl.value = ctrl
+  const reqSessionId = currentSessionId.value
+
   messages.value.push({ role: 'user', content: q })
   question.value = ''
   loading.value = true
   messages.value.push({ role: 'ai', content: '思考中…' })
   scrollToBottom()
   try {
-    const res = await chatAsk(currentSessionId.value, q)
-    messages.value[messages.value.length - 1].content = res.data
-    await refreshSessions() // 更新标题/活跃时间
+    const res = await chatAsk(reqSessionId, q, ctrl.signal)
+    // 只有当前仍在原会话才更新界面；否则答案已由后端保存，切回该会话即可看到
+    if (reqSessionId === currentSessionId.value) {
+      messages.value[messages.value.length - 1].content = res.data
+      await refreshSessions() // 更新标题/活跃时间
+    }
   } catch (e) {
-    messages.value[messages.value.length - 1].content = '请求失败：' + (e.message || e) + '（请确认后端已启动）'
+    // 主动取消（切换/新建）不提示；真正的失败才提示
+    if (e.name !== 'CanceledError' && reqSessionId === currentSessionId.value) {
+      messages.value[messages.value.length - 1].content = '请求失败：' + (e.message || e) + '（请确认后端已启动）'
+    }
   } finally {
-    loading.value = false
-    scrollToBottom()
+    if (reqSessionId === currentSessionId.value) {
+      loading.value = false
+      pendingCtrl.value = null
+      scrollToBottom()
+    }
   }
 }
 
