@@ -7,35 +7,47 @@
       </div>
     </template>
 
-    <div class="chat-wrap">
-      <!-- 会话管理：切换 / 新建 / 删除 -->
-      <div class="session-bar">
-        <el-select v-model="currentSessionId" placeholder="选择会话" size="small" style="flex:1" @change="switchSession">
-          <el-option v-for="s in sessions" :key="s.sessionId" :label="`${s.title}（${fmtTime(s.updatedAt)}）`" :value="s.sessionId" />
-        </el-select>
-        <el-button size="small" type="primary" :icon="Plus" @click="newSession">新建</el-button>
-        <el-button size="small" type="danger" :icon="Delete" :disabled="!sessions.length" @click="removeSession">删除</el-button>
-      </div>
-
-      <div ref="chatBox" class="chat-box">
-        <div v-for="(m, i) in messages" :key="i" class="msg" :class="m.role">
-          <div class="avatar">{{ m.role === 'user' ? '我' : 'AI' }}</div>
-          <div class="bubble" v-html="renderMarkdown(m.content)"></div>
+    <div class="chat-layout">
+      <!-- 左侧：固定会话列表 -->
+      <div class="session-side">
+        <el-button size="small" type="primary" class="new-btn" :icon="Plus" @click="newSession">新建会话</el-button>
+        <div class="session-list">
+          <div
+            v-for="s in sessions"
+            :key="s.sessionId"
+            class="session-item"
+            :class="{ active: s.sessionId === currentSessionId }"
+            @click="switchSession(s.sessionId)"
+          >
+            <span class="session-title" :title="s.title">{{ s.title }}</span>
+            <el-icon class="del-icon" @click.stop="removeSession(s)"><Close /></el-icon>
+          </div>
+          <div v-if="!sessions.length" class="session-empty">暂无会话</div>
         </div>
-        <el-empty v-if="!messages.length" description="问点什么吧，例如：张三的打法是什么" :image-size="60" />
       </div>
 
-      <div class="input-row">
-        <el-input
-          v-model="question"
-          placeholder="试试问：张三的打法 / 我和李四的比赛 / 长胶怎么应对"
-          clearable
-          @keyup.enter="send"
-        />
-        <el-button type="primary" :loading="loading" @click="send">发送</el-button>
-      </div>
-      <div class="suggest">
-        <el-tag v-for="s in suggests" :key="s" size="small" class="suggest-tag" @click="fill(s)">{{ s }}</el-tag>
+      <!-- 右侧：聊天区 -->
+      <div class="chat-main">
+        <div ref="chatBox" class="chat-box">
+          <div v-for="(m, i) in messages" :key="i" class="msg" :class="m.role">
+            <div class="avatar">{{ m.role === 'user' ? '我' : 'AI' }}</div>
+            <div class="bubble" v-html="renderMarkdown(m.content)"></div>
+          </div>
+          <el-empty v-if="!messages.length" description="问点什么吧，例如：张三的打法是什么" :image-size="60" />
+        </div>
+
+        <div class="input-row">
+          <el-input
+            v-model="question"
+            placeholder="试试问：张三的打法 / 我和李四的比赛 / 长胶怎么应对"
+            clearable
+            @keyup.enter="send"
+          />
+          <el-button type="primary" :loading="loading" @click="send">发送</el-button>
+        </div>
+        <div class="suggest">
+          <el-tag v-for="s in suggests" :key="s" size="small" class="suggest-tag" @click="fill(s)">{{ s }}</el-tag>
+        </div>
       </div>
     </div>
   </el-card>
@@ -44,7 +56,7 @@
 <script setup>
 import { ref, nextTick, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Delete } from '@element-plus/icons-vue'
+import { Plus, Close } from '@element-plus/icons-vue'
 import { chatAsk, chatHistory, chatSessions, createSession, deleteSession } from '../api'
 
 const messages = ref([])
@@ -57,12 +69,6 @@ const suggests = ['张三的打法是什么', '我和李四的比赛记录', '�
 const sessions = ref([])
 const currentSessionId = ref(localStorage.getItem('pp_session_id') || '')
 const persistSession = () => localStorage.setItem('pp_session_id', currentSessionId.value)
-
-function fmtTime(ts) {
-  const d = new Date(ts)
-  const pad = n => String(n).padStart(2, '0')
-  return `${d.getMonth() + 1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}`
-}
 
 async function refreshSessions() {
   try {
@@ -98,6 +104,7 @@ async function loadHistory() {
 }
 
 async function switchSession(id) {
+  if (id === currentSessionId.value) return
   currentSessionId.value = id
   persistSession()
   await loadHistory()
@@ -116,16 +123,15 @@ async function newSession() {
   }
 }
 
-async function removeSession() {
-  if (!currentSessionId.value) return
+async function removeSession(s) {
   try {
-    await ElMessageBox.confirm('删除后该会话的对话记录将无法恢复，确定删除吗？', '删除会话', {
+    await ElMessageBox.confirm(`删除会话「${s.title}」？该会话的对话记录将无法恢复。`, '删除会话', {
       type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消'
     })
   } catch (e) { return }
   try {
-    await deleteSession(currentSessionId.value)
-    currentSessionId.value = ''
+    await deleteSession(s.sessionId)
+    if (s.sessionId === currentSessionId.value) currentSessionId.value = ''
     await refreshSessions()
     ElMessage.success('会话已删除')
   } catch (e) {
@@ -151,7 +157,7 @@ function fill(s) { question.value = s }
 async function send() {
   const q = question.value.trim()
   if (!q || loading.value) return
-  // 没有当前会话（如后端无会话）先自动建一个
+  // 没有当前会话先自动建一个
   if (!currentSessionId.value) {
     const res = await createSession({ title: '' })
     currentSessionId.value = res.data.sessionId
@@ -189,8 +195,32 @@ onMounted(async () => {
 <style scoped>
 .chat-card { height: 100%; display: flex; flex-direction: column; border-radius: 12px; }
 .chat-card :deep(.el-card__body) { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
-.chat-wrap { flex: 1; display: flex; flex-direction: column; min-height: 0; }
-.session-bar { display: flex; gap: 6px; margin-bottom: 10px; align-items: center; }
+.chat-layout { flex: 1; display: flex; min-height: 0; }
+
+/* 左侧会话栏 */
+.session-side {
+  width: 200px; flex-shrink: 0; margin-right: 12px;
+  display: flex; flex-direction: column;
+  background: #f7f8fa; border: 1px solid #e5e7eb; border-radius: 10px;
+  padding: 10px; min-height: 0;
+}
+.new-btn { width: 100%; margin-bottom: 10px; }
+.session-list { flex: 1; overflow-y: auto; min-height: 0; }
+.session-item {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 10px; border-radius: 8px; cursor: pointer;
+  font-size: 13px; color: #374151; margin-bottom: 2px;
+}
+.session-item:hover { background: #eef0f3; }
+.session-item.active { background: #0f766e; color: #fff; }
+.session-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+.del-icon { visibility: hidden; cursor: pointer; flex-shrink: 0; font-size: 14px; }
+.session-item:hover .del-icon { visibility: visible; }
+.session-item.active .del-icon:hover { color: #fca5a5; }
+.session-empty { color: #9ca3af; font-size: 13px; text-align: center; padding: 20px 0; }
+
+/* 右侧聊天区 */
+.chat-main { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 .chat-box {
   flex: 1; min-height: 0; overflow-y: auto; padding: 10px 4px;
   background: #fafbfc; border: 1px solid #e5e7eb; border-radius: 10px;
