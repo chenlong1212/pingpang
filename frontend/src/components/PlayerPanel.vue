@@ -6,6 +6,7 @@
         <el-col :span="12"><el-form-item label="持拍"><el-select v-model="form.handType" placeholder="选择" style="width:100%"><el-option label="左手" value="左手" /><el-option label="右手" value="右手" /></el-select></el-form-item></el-col>
         <el-col :span="12"><el-form-item label="握拍"><el-select v-model="form.gripType" placeholder="选择" style="width:100%"><el-option label="直拍" value="直拍" /><el-option label="横拍" value="横拍" /></el-select></el-form-item></el-col>
         <el-col :span="12"><el-form-item label="打法"><el-select v-model="form.playStyle" placeholder="选择" style="width:100%"><el-option v-for="s in styles" :key="s" :label="s" :value="s" /></el-select></el-form-item></el-col>
+        <el-col :span="12"><el-form-item label="开球网积分"><el-input-number v-model="form.kaitoScore" :min="0" :max="5000" :step="5" controls-position="right" placeholder="自行填写" style="width:100%" /></el-form-item></el-col>
       </el-row>
       <div class="btn-row">
         <el-button type="primary" :loading="saving" size="default" @click="save">
@@ -28,6 +29,9 @@
             <el-tag size="small" type="success">{{ row.playStyle || '-' }}</el-tag>
           </template>
         </el-table-column>
+        <el-table-column prop="kaitoScore" label="开球网积分" width="100">
+          <template #default="{ row }">{{ row.kaitoScore ?? '-' }}</template>
+        </el-table-column>
         <el-table-column label="操作" width="130">
           <template #default="{ row }">
             <el-button size="small" type="primary" link @click.stop="editPlayer(row)">编辑</el-button>
@@ -48,7 +52,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { savePlayer, updatePlayer, deletePlayer, listPlayers } from '../api'
 
 const styles = ['反胶', '长胶', '生胶', '推挡', '防弧']
-const form = reactive({ playerName: '', handType: '', gripType: '', playStyle: '' })
+const form = reactive({ playerName: '', handType: '', gripType: '', playStyle: '', kaitoScore: null })
 const editingId = ref(null)
 const saving = ref(false)
 const players = ref([])
@@ -77,6 +81,7 @@ function editPlayer(row) {
   form.handType = row.handType
   form.gripType = row.gripType
   form.playStyle = row.playStyle
+  form.kaitoScore = row.kaitoScore ?? null
   editingId.value = row.id
   listVisible.value = false
   ElMessage.info('正在编辑选手，修改后点击「保存修改」')
@@ -85,6 +90,7 @@ function editPlayer(row) {
 function cancelEdit() {
   editingId.value = null
   form.playerName = form.handType = form.gripType = form.playStyle = ''
+  form.kaitoScore = null
 }
 
 async function removePlayer(row) {

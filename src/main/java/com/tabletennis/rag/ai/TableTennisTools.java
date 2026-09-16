@@ -26,7 +26,7 @@ public class TableTennisTools {
     private final TtMatchRecordService matchService;
     private final HybridRAGService hybridRAGService;
 
-    @Tool(description = "根据选手姓名，查询选手乒乓球档案，信息包含：持拍左右手（左手/右手）、握拍方式（直拍/横拍）、打法类型（反胶/长胶/生胶/推挡/防弧）")
+    @Tool(description = "根据选手姓名，查询选手乒乓球档案，信息包含：持拍左右手（左手/右手）、握拍方式（直拍/横拍）、打法类型（反胶/长胶/生胶/推挡/防弧）、开球网积分")
     public TtPlayer queryPlayerInfo(@ToolParam(description = "选手姓名") String playerName) {
         Optional<TtPlayer> playerOpt = playerService.getByName(playerName);
         return playerOpt.orElse(null);

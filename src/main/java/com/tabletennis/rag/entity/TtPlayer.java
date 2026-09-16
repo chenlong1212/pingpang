@@ -17,6 +17,9 @@ public class TtPlayer {
     private String gripType;
     private String playStyle;
 
+    /** 开球网积分（可空，自行填写） */
+    private Integer kaitoScore;
+
     private LocalDateTime createTime;
     private LocalDateTime updateTime;
 }
