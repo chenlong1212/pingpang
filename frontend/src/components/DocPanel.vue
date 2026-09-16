@@ -16,12 +16,14 @@
       <!-- Tab 1：文件上传 -->
       <el-tab-pane label="文件上传" name="file">
         <el-upload
+          v-model:file-list="fileList"
           :auto-upload="false"
           :show-file-list="true"
           accept=".txt,.md,.pdf,.docx"
           :limit="1"
           :on-change="onFileChange"
-          :on-remove="() => file = null"
+          :on-exceed="handleExceed"
+          :on-remove="clearFile"
           drag
           style="margin-bottom:10px"
         >
@@ -122,6 +124,7 @@ import { uploadDoc, uploadText as uploadTextApi, listDocs, getDocDetail, deleteD
 const activeTab = ref('file')
 const asyncMode = ref(true)
 const file = ref(null)
+const fileList = ref([])
 const uploading = ref(false)
 const docs = ref([])
 const listVisible = ref(false)
@@ -131,6 +134,15 @@ const textForm = reactive({ title: '', content: '' })
 let pollTimer = null
 
 function onFileChange(f) { file.value = f.raw }
+// 已有一个文件时再次选择：替换为新文件（否则 on-change 不触发导致一直提示未选文件）
+function handleExceed(files) {
+  fileList.value = [files[0]]
+  file.value = files[0].raw
+}
+function clearFile() {
+  file.value = null
+  fileList.value = []
+}
 function statusText(s) { return ({ 0: '待处理', 1: '处理中', 2: '成功', 3: '失败' })[s] || s }
 function statusType(s) { return ({ 0: 'info', 1: 'warning', 2: 'success', 3: 'danger' })[s] || 'info' }
 
@@ -198,11 +210,11 @@ async function upload() {
     const res = await uploadDoc(file.value, asyncMode.value)
     if (asyncMode.value) {
       ElMessage.info(res.data)
-      file.value = null
+      clearFile()
       startPolling()
     } else {
       ElMessage.success(res.data)
-      file.value = null
+      clearFile()
       load()
     }
   } catch (e) {
