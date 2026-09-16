@@ -68,7 +68,7 @@ public class DocUploadController {
                 // 同步模式：直接解析→切片→向量化→ES 索引
                 String content = docParserService.parseFile(targetFile.toString());
                 if (content == null || content.isBlank()) {
-                    throw new RuntimeException("未能从文件中提取到文本内容");
+                    throw new RuntimeException("该文件没有可提取的文本层（可能是扫描件/图片型或非标准编码 PDF）。建议：①改用【文本录入】手动输入内容；②先将 PDF 转为可复制的文本版再上传");
                 }
                 int chunkCount = hybridRAGService.insertDoc(docId, fileName, content, "upload");
                 meta.setStatus(2);

@@ -70,7 +70,7 @@ public class DocUploadConsumer {
             displayName = message.getFileName();
         }
         if (content == null || content.isBlank()) {
-            throw new RuntimeException("提取到的文本内容为空");
+            throw new RuntimeException("该文件没有可提取的文本层（可能是扫描件/图片型或非标准编码 PDF）。建议：①改用【文本录入】手动输入内容；②先将 PDF 转为可复制的文本版再上传");
         }
         int chunkCount = hybridRAGService.insertDoc(message.getDocId(), displayName, content, message.getSource());
         markSuccess(message.getDocId(), chunkCount);
