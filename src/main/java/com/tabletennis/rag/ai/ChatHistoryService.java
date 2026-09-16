@@ -74,6 +74,11 @@ public class ChatHistoryService {
         redisTemplate.delete(key(sessionId));
     }
 
+    /** 加载完整历史（给前端恢复聊天界面用） */
+    public List<Map<String, String>> loadAll(String sessionId) {
+        return loadRaw(sessionId);
+    }
+
     private List<Map<String, String>> loadRaw(String sessionId) {
         String json = redisTemplate.opsForValue().get(key(sessionId));
         if (json == null || json.isBlank()) return new ArrayList<>();

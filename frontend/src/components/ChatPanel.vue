@@ -33,9 +33,9 @@
 </template>
 
 <script setup>
-import { ref, nextTick } from 'vue'
+import { ref, nextTick, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { chatAsk } from '../api'
+import { chatAsk, chatHistory } from '../api'
 
 const messages = ref([])
 const question = ref('')
@@ -61,6 +61,22 @@ function renderMarkdown(s) {
 }
 
 function fill(s) { question.value = s }
+
+// 刷新后从后端恢复聊天历史
+onMounted(async () => {
+  try {
+    const res = await chatHistory(sessionId)
+    if (Array.isArray(res.data) && res.data.length) {
+      messages.value = res.data.map(m => ({
+        role: m.role === 'user' ? 'user' : 'ai',
+        content: m.content || ''
+      }))
+      scrollToBottom()
+    }
+  } catch (e) {
+    // 后端未启动或首次使用，忽略
+  }
+})
 
 async function send() {
   const q = question.value.trim()

@@ -11,6 +11,8 @@ export const chatAsk = (sessionId, question) =>
     headers: { 'Content-Type': 'application/json' },
     responseType: 'text'
   })
+// 加载会话历史（刷新后恢复聊天界面）
+export const chatHistory = (sessionId) => api.get('/chat/history', { params: { sessionId } })
 
 // 选手
 export const savePlayer = (data) => api.post('/player/save', data)

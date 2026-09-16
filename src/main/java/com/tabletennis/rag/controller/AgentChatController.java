@@ -21,6 +21,12 @@ public class AgentChatController {
     private final QueryRewriteService queryRewriteService;
     private final ChatHistoryService chatHistoryService;
 
+    /** 获取指定会话的历史消息，供前端刷新后恢复聊天界面 */
+    @GetMapping("/history")
+    public List<java.util.Map<String, String>> history(@RequestParam String sessionId) {
+        return chatHistoryService.loadAll(sessionId);
+    }
+
     /** 请求体：前端生成的会话 ID + 用户问题 */
     public record AskRequest(String sessionId, String question) {}
 
