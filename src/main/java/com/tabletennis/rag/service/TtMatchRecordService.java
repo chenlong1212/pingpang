@@ -21,6 +21,10 @@ public class TtMatchRecordService {
         return matchRepository.findByMatchType(matchType);
     }
 
+    public java.util.Optional<TtMatchRecord> getById(Long id) {
+        return matchRepository.findById(id);
+    }
+
     /** 查询结果缓存 30 分钟，命中 Redis 不再查库 */
     @Cacheable(cacheNames = "matches", key = "'all'")
     public List<TtMatchRecord> listAll() {
@@ -31,5 +35,18 @@ public class TtMatchRecordService {
     @CacheEvict(cacheNames = "matches", allEntries = true)
     public TtMatchRecord save(TtMatchRecord record) {
         return matchRepository.save(record);
+    }
+
+    /** 编辑：按 id 更新已有比赛记录 */
+    @CacheEvict(cacheNames = "matches", allEntries = true)
+    public TtMatchRecord update(Long id, TtMatchRecord record) {
+        record.setId(id);
+        return matchRepository.save(record);
+    }
+
+    /** 删除比赛记录，联动清除缓存 */
+    @CacheEvict(cacheNames = "matches", allEntries = true)
+    public void delete(Long id) {
+        matchRepository.deleteById(id);
     }
 }

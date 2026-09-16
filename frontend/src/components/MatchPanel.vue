@@ -9,13 +9,16 @@
         <el-col :span="24"><el-form-item label="备注（可选）"><el-input v-model="form.matchNote" type="textarea" :rows="2" placeholder="关键心得、技战术要点…" /></el-form-item></el-col>
       </el-row>
       <div class="btn-row">
-        <el-button type="primary" :loading="saving" size="default" @click="save">保存比赛记录</el-button>
+        <el-button type="primary" :loading="saving" size="default" @click="save">
+          {{ editingId ? '保存修改' : '保存比赛记录' }}
+        </el-button>
         <el-button size="default" @click="openList">查看比赛记录</el-button>
+        <el-button v-if="editingId" size="default" @click="cancelEdit">取消编辑</el-button>
       </div>
     </el-form>
 
     <!-- 悬浮查看比赛记录 -->
-    <el-dialog v-model="listVisible" title="比赛记录" width="640px" append-to-body>
+    <el-dialog v-model="listVisible" title="比赛记录" width="720px" append-to-body>
       <el-input v-model="keyword" placeholder="输入对手姓名筛选…" clearable style="margin-bottom:10px" />
       <el-table :data="filtered" size="small" max-height="340">
         <el-table-column prop="opponentName" label="对手" />
@@ -27,6 +30,12 @@
         </el-table-column>
         <el-table-column prop="matchScore" label="比分" width="80" />
         <el-table-column prop="matchNote" label="备注" show-overflow-tooltip />
+        <el-table-column label="操作" width="130">
+          <template #default="{ row }">
+            <el-button size="small" type="primary" link @click.stop="editMatch(row)">编辑</el-button>
+            <el-button size="small" type="danger" link @click.stop="removeMatch(row)">删除</el-button>
+          </template>
+        </el-table-column>
       </el-table>
       <template #footer>
         <el-button @click="listVisible = false">关闭</el-button>
@@ -37,12 +46,13 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
-import { saveMatch, listMatches } from '../api'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { saveMatch, updateMatch, deleteMatch, listMatches } from '../api'
 
 const types = ['开球网', '私下交流', '大型比赛']
 const scores = ['2-0', '3-0', '3-1', '3-2']
 const form = reactive({ opponentName: '', matchDate: '', matchType: '', matchScore: '', matchNote: '' })
+const editingId = ref(null)
 const saving = ref(false)
 const matches = ref([])
 const keyword = ref('')
@@ -65,15 +75,52 @@ function openList() {
   listVisible.value = true
 }
 
+function editMatch(row) {
+  form.opponentName = row.opponentName
+  form.matchDate = row.matchDate
+  form.matchType = row.matchType
+  form.matchScore = row.matchScore
+  form.matchNote = row.matchNote
+  editingId.value = row.id
+  listVisible.value = false
+  ElMessage.info('正在编辑比赛记录，修改后点击「保存修改」')
+}
+
+function cancelEdit() {
+  editingId.value = null
+  form.opponentName = form.matchDate = form.matchType = form.matchScore = form.matchNote = ''
+}
+
+async function removeMatch(row) {
+  try {
+    await ElMessageBox.confirm(`确定删除与「${row.opponentName}」的这条比赛记录吗？`, '删除确认', {
+      type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消'
+    })
+  } catch (e) { return }
+  try {
+    const res = await deleteMatch(row.id)
+    ElMessage.success(res.data)
+    load()
+    if (editingId.value === row.id) cancelEdit()
+  } catch (e) {
+    ElMessage.error('删除失败：' + (e.message || e))
+  }
+}
+
 async function save() {
   if (!form.opponentName || !form.matchDate || !form.matchType || !form.matchScore) {
     return ElMessage.warning('请完整填写对手、日期、类型、比分')
   }
   saving.value = true
   try {
-    await saveMatch({ ...form })
-    ElMessage.success('比赛记录已保存')
-    form.opponentName = form.matchDate = form.matchType = form.matchScore = form.matchNote = ''
+    if (editingId.value) {
+      await updateMatch(editingId.value, { ...form })
+      ElMessage.success('比赛记录已更新')
+    } else {
+      await saveMatch({ ...form })
+      ElMessage.success('比赛记录已保存')
+    }
+    cancelEdit()
     load()
   } catch (e) {
     ElMessage.error('保存失败：' + (e.message || e))
@@ -86,5 +133,5 @@ onMounted(load)
 </script>
 
 <style scoped>
-.btn-row { display: flex; gap: 8px; }
+.btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
 </style>

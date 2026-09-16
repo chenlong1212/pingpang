@@ -14,10 +14,14 @@ export const chatAsk = (question) =>
 
 // 选手
 export const savePlayer = (data) => api.post('/player/save', data)
+export const updatePlayer = (id, data) => api.put(`/player/${id}`, data)
+export const deletePlayer = (id) => api.delete(`/player/${id}`)
 export const listPlayers = () => api.get('/player/list')
 
 // 比赛
 export const saveMatch = (data) => api.post('/match/save', data)
+export const updateMatch = (id, data) => api.put(`/match/${id}`, data)
+export const deleteMatch = (id) => api.delete(`/match/${id}`)
 export const listMatches = () => api.get('/match/list')
 
 // 知识库文档

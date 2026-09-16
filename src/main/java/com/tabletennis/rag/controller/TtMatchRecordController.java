@@ -33,4 +33,23 @@ public class TtMatchRecordController {
     public ResponseEntity<TtMatchRecord> save(@RequestBody TtMatchRecord record) {
         return ResponseEntity.ok(matchService.save(record));
     }
+
+    /** 编辑比赛记录（按 id 更新） */
+    @PutMapping("/{id}")
+    public ResponseEntity<TtMatchRecord> update(@PathVariable Long id, @RequestBody TtMatchRecord record) {
+        if (matchService.getById(id).isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
+        return ResponseEntity.ok(matchService.update(id, record));
+    }
+
+    /** 删除比赛记录 */
+    @DeleteMapping("/{id}")
+    public ResponseEntity<String> delete(@PathVariable Long id) {
+        if (matchService.getById(id).isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
+        matchService.delete(id);
+        return ResponseEntity.ok("success: 已删除");
+    }
 }

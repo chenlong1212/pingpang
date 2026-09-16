@@ -18,6 +18,10 @@ public class TtPlayerService {
         return playerRepository.findByPlayerName(name);
     }
 
+    public Optional<TtPlayer> getById(Long id) {
+        return playerRepository.findById(id);
+    }
+
     /** 查询结果缓存 30 分钟，命中 Redis 不再查库 */
     @Cacheable(cacheNames = "players", key = "'all'")
     public List<TtPlayer> listAll() {
@@ -32,5 +36,18 @@ public class TtPlayerService {
     @CacheEvict(cacheNames = "players", allEntries = true)
     public TtPlayer save(TtPlayer player) {
         return playerRepository.save(player);
+    }
+
+    /** 编辑：按 id 更新已有选手 */
+    @CacheEvict(cacheNames = "players", allEntries = true)
+    public TtPlayer update(Long id, TtPlayer player) {
+        player.setId(id);
+        return playerRepository.save(player);
+    }
+
+    /** 删除选手，联动清除缓存 */
+    @CacheEvict(cacheNames = "players", allEntries = true)
+    public void delete(Long id) {
+        playerRepository.deleteById(id);
     }
 }
