@@ -67,9 +67,10 @@
           </template>
         </el-table-column>
         <el-table-column prop="chunkCount" label="切片数" width="70" />
-        <el-table-column label="操作" width="90">
+        <el-table-column label="操作" width="150">
           <template #default="{ row }">
             <el-button size="small" type="primary" link @click.stop="viewDoc(row)">查看</el-button>
+            <el-button size="small" type="danger" link @click.stop="removeDoc(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -115,8 +116,8 @@
 
 <script setup>
 import { ref, reactive, onMounted, onBeforeUnmount } from 'vue'
-import { ElMessage } from 'element-plus'
-import { uploadDoc, uploadText as uploadTextApi, listDocs, getDocDetail } from '../api'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { uploadDoc, uploadText as uploadTextApi, listDocs, getDocDetail, deleteDoc } from '../api'
 
 const activeTab = ref('file')
 const asyncMode = ref(true)
@@ -165,6 +166,28 @@ async function viewDoc(row) {
   } catch (e) {
     detail.value.loading = false
     ElMessage.error('加载文档内容失败：' + (e.message || e))
+  }
+}
+
+async function removeDoc(row) {
+  try {
+    await ElMessageBox.confirm(
+      `确定删除文档「${row.docName}」吗？将同时清理 ES 索引切片与本地文件，不可恢复。`,
+      '删除确认',
+      { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' }
+    )
+  } catch (e) {
+    return // 用户取消
+  }
+  try {
+    const res = await deleteDoc(row.docId)
+    ElMessage.success(res.data)
+    load()
+    if (detailVisible.value && detail.value.meta?.docId === row.docId) {
+      detailVisible.value = false
+    }
+  } catch (e) {
+    ElMessage.error('删除失败：' + (e.message || e))
   }
 }
 

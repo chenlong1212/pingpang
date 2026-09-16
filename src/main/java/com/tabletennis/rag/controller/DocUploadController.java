@@ -147,6 +147,53 @@ public class DocUploadController {
     }
 
     /**
+     * 删除文档：清理 ES 切片 + MySQL 元数据 + 本地落盘文件
+     */
+    @DeleteMapping("/{docId}")
+    public String deleteDoc(@PathVariable String docId) {
+        // 1. 删除 ES 中该文档的所有切片（delete_by_query）
+        try {
+            co.elastic.clients.elasticsearch.core.DeleteByQueryResponse resp = esClient.deleteByQuery(d -> d
+                    .index("table_tennis_knowledge")
+                    .query(q -> q.term(t -> t.field("docId").value(docId))));
+            log.info("ES 删除切片 docId={} deleted={}", docId, resp.deleted());
+        } catch (Exception e) {
+            log.warn("ES 删除切片失败 docId={}: {}", docId, e.getMessage());
+        }
+
+        // 2. 删除 MySQL 元数据
+        docRepo.findByDocId(docId).ifPresent(meta -> {
+            // 3. 删除本地落盘文件（仅限项目自己的上传目录）
+            if (meta.getDocPath() != null && meta.getDocPath().contains(UPLOAD_DIR)) {
+                try {
+                    Path parent = Path.of(meta.getDocPath()).getParent();
+                    if (parent != null && parent.getFileName() != null
+                            && parent.getFileName().toString().equals(docId)) {
+                        deleteRecursively(parent);
+                    }
+                } catch (Exception e) {
+                    log.warn("删除落盘文件失败 docId={}: {}", docId, e.getMessage());
+                }
+            }
+            docRepo.delete(meta);
+        });
+        return "success: 文档已删除";
+    }
+
+    private void deleteRecursively(Path dir) throws IOException {
+        if (!Files.exists(dir)) return;
+        try (var stream = Files.walk(dir)) {
+            stream.sorted(java.util.Comparator.reverseOrder()).forEach(p -> {
+                try {
+                    Files.deleteIfExists(p);
+                } catch (IOException e) {
+                    log.warn("删除文件失败 {}", p);
+                }
+            });
+        }
+    }
+
+    /**
      * 文档详情：元信息 + ES 中该文档的所有切片内容（按 chunkIndex 排序），用于前端可视化查看
      */
     @GetMapping("/detail")

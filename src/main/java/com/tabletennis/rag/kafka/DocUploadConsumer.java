@@ -55,6 +55,11 @@ public class DocUploadConsumer {
     }
 
     private void process(DocUploadMessage message) throws Exception {
+        // 文档可能已在消费前被删除：跳过处理，避免读取已删除的落盘文件
+        if (docRepo.findByDocId(message.getDocId()).isEmpty()) {
+            log.info("文档已删除，跳过处理 docId={}", message.getDocId());
+            return;
+        }
         String content;
         String displayName;
         if ("upload".equals(message.getSource())) {
