@@ -37,7 +37,7 @@ public class TableTennisTools {
         return matchService.getByOpponent(opponentName);
     }
 
-    @Tool(description = "乒乓球领域知识库检索，用于查询乒乓球技术、战术、胶皮器材、训练方法等专业知识，当问题不是查选手档案、比赛记录时调用这个工具")
+    @Tool(description = "乒乓球领域知识库检索，用于查询乒乓球技术、战术、胶皮器材、训练方法、赛事参赛名单、报名信息、球队人员名单等专业知识；当问题不是查选手个人档案、也不是查比赛记录时，调用这个工具")
     public List<RetrieveDTO> queryKnowledge(@ToolParam(description = "用户问题") String question) {
         return hybridRAGService.hybridRetrieve(question);
     }
