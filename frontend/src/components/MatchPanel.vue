@@ -17,19 +17,23 @@
       </div>
     </el-form>
 
-    <!-- 悬浮查看比赛记录 -->
-    <el-dialog v-model="listVisible" title="比赛记录" width="720px" append-to-body>
-      <el-input v-model="keyword" placeholder="输入对手姓名筛选…" clearable style="margin-bottom:10px" />
-      <el-table :data="filtered" size="small" max-height="340">
-        <el-table-column prop="opponentName" label="对手" />
-        <el-table-column prop="matchDate" label="日期" width="110" />
-        <el-table-column label="类型" width="100">
+    <!-- 悬浮查看比赛记录：倒序分页 -->
+    <el-dialog v-model="listVisible" title="比赛记录" width="760px" append-to-body>
+      <el-input v-model="keyword" placeholder="输入对手姓名筛选…" clearable style="margin-bottom:10px" @input="onKeywordInput" />
+      <el-table :data="matches" size="small" max-height="380" v-loading="loading">
+        <el-table-column label="#" width="55">
+          <template #default="{ $index }">
+            {{ (currentPage - 1) * pageSize + $index + 1 }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="matchDate" label="日期" width="105" sortable :sort-orders="['descending']" :default-sort="{ prop: 'matchDate', order: 'descending' }" />
+        <el-table-column label="类型" width="90">
           <template #default="{ row }">
             <el-tag size="small" type="primary">{{ row.matchType || '-' }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="matchScore" label="比分" width="80" />
-        <el-table-column prop="matchNote" label="备注" show-overflow-tooltip />
+        <el-table-column prop="opponentName" label="对手" show-overflow-tooltip />
+        <el-table-column prop="matchScore" label="比分" width="70" />
         <el-table-column label="操作" width="130">
           <template #default="{ row }">
             <el-button size="small" type="primary" link @click.stop="editMatch(row)">编辑</el-button>
@@ -37,41 +41,71 @@
           </template>
         </el-table-column>
       </el-table>
-      <template #footer>
-        <el-button @click="listVisible = false">关闭</el-button>
-      </template>
+      <el-pagination
+        v-model:current-page="currentPage"
+        v-model:page-size="pageSize"
+        :total="total"
+        :page-sizes="[10, 20, 50]"
+        layout="total, sizes, prev, pager, next, jumper"
+        style="margin-top:10px; justify-content:flex-end"
+        @current-change="load"
+        @size-change="onSizeChange"
+      />
     </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { saveMatch, updateMatch, deleteMatch, listMatches } from '../api'
+import { saveMatch, updateMatch, deleteMatch, pageMatches } from '../api'
 
 const types = ['开球网', '私下交流', '大型比赛']
 const form = reactive({ opponentName: '', matchDate: '', matchType: '', matchScore: '', matchNote: '' })
 const editingId = ref(null)
 const saving = ref(false)
+
+// 分页列表状态
 const matches = ref([])
 const keyword = ref('')
+const currentPage = ref(1)
+const pageSize = ref(10)
+const total = ref(0)
+const loading = ref(false)
 const listVisible = ref(false)
 
-const filtered = computed(() => {
-  const kw = keyword.value.trim()
-  return kw ? matches.value.filter(m => (m.opponentName || '').includes(kw)) : matches.value
-})
-
 async function load() {
+  loading.value = true
   try {
-    matches.value = (await listMatches()).data
-  } catch (e) { /* 静默 */ }
+    const res = await pageMatches(currentPage.value, pageSize.value, keyword.value.trim() || undefined)
+    matches.value = res.data.content || []
+    total.value = res.data.totalElements || 0
+    // 当前页超出总页数时（如删除后）回退
+    const totalPages = res.data.totalPages || 1
+    if (currentPage.value > totalPages && totalPages > 0) {
+      currentPage.value = totalPages
+      return load()
+    }
+  } catch (e) {
+    ElMessage.error('加载失败：' + (e.message || e))
+  } finally {
+    loading.value = false
+  }
+}
+
+function onKeywordInput() {
+  currentPage.value = 1
+  load()
+}
+
+function onSizeChange() {
+  currentPage.value = 1
+  load()
 }
 
 function openList() {
-  keyword.value = ''
-  load()
   listVisible.value = true
+  load()
 }
 
 function editMatch(row) {
@@ -99,8 +133,8 @@ async function removeMatch(row) {
   try {
     const res = await deleteMatch(row.id)
     ElMessage.success(res.data)
-    load()
     if (editingId.value === row.id) cancelEdit()
+    load()
   } catch (e) {
     ElMessage.error('删除失败：' + (e.message || e))
   }
@@ -127,8 +161,6 @@ async function save() {
     saving.value = false
   }
 }
-
-onMounted(load)
 </script>
 
 <style scoped>

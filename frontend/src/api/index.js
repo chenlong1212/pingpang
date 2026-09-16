@@ -23,6 +23,7 @@ export const saveMatch = (data) => api.post('/match/save', data)
 export const updateMatch = (id, data) => api.put(`/match/${id}`, data)
 export const deleteMatch = (id) => api.delete(`/match/${id}`)
 export const listMatches = () => api.get('/match/list')
+export const pageMatches = (page, size, keyword) => api.get('/match/page', { params: { page, size, keyword } })
 
 // 知识库文档
 export const uploadDoc = (file, sync) => {

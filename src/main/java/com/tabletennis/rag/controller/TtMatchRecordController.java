@@ -19,6 +19,15 @@ public class TtMatchRecordController {
         return ResponseEntity.ok(matchService.listAll());
     }
 
+    /** 分页查询：倒序（最新在前）+ 页码，每页 size 条，支持 keyword 模糊筛选对手 */
+    @GetMapping("/page")
+    public ResponseEntity<org.springframework.data.domain.Page<TtMatchRecord>> page(
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false) String keyword) {
+        return ResponseEntity.ok(matchService.searchPage(keyword, Math.max(page, 1), Math.min(size, 50)));
+    }
+
     @GetMapping("/opponent/{opponentName}")
     public ResponseEntity<List<TtMatchRecord>> getByOpponent(@PathVariable String opponentName) {
         return ResponseEntity.ok(matchService.getByOpponent(opponentName));
