@@ -21,9 +21,9 @@
     <el-dialog v-model="listVisible" title="比赛记录" width="760px" append-to-body>
       <el-input v-model="keyword" placeholder="输入对手姓名筛选…" clearable style="margin-bottom:10px" @input="onKeywordInput" />
       <el-table :data="matches" size="small" max-height="380" v-loading="loading">
-        <el-table-column label="#" width="55">
+        <el-table-column label="#" width="60">
           <template #default="{ $index }">
-            {{ (currentPage - 1) * pageSize + $index + 1 }}
+            {{ total - (currentPage - 1) * pageSize - $index }}
           </template>
         </el-table-column>
         <el-table-column prop="matchDate" label="日期" width="105" sortable :sort-orders="['descending']" :default-sort="{ prop: 'matchDate', order: 'descending' }" />
