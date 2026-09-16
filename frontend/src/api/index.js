@@ -29,3 +29,4 @@ export const uploadDoc = (file, sync) => {
 }
 export const uploadText = (data, sync) => api.post('/doc/uploadText', { ...data, sync })
 export const listDocs = () => api.get('/doc/list')
+export const getDocDetail = (docId) => api.get('/doc/detail', { params: { docId } })

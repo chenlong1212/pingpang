@@ -4,8 +4,10 @@ import com.tabletennis.rag.entity.TtKnowledgeDoc;
 import com.tabletennis.rag.kafka.DocUploadMessage;
 import com.tabletennis.rag.kafka.DocUploadProducer;
 import com.tabletennis.rag.rag.HybridRAGService;
+import com.tabletennis.rag.rag.KnowledgeChunk;
 import com.tabletennis.rag.repository.TtKnowledgeDocRepository;
 import com.tabletennis.rag.service.DocParserService;
+import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
@@ -38,6 +40,7 @@ public class DocUploadController {
     private final TtKnowledgeDocRepository docRepo;
     private final DocParserService docParserService;
     private final HybridRAGService hybridRAGService;
+    private final ElasticsearchClient esClient;
 
     @PostMapping("/upload")
     public String uploadDoc(@RequestParam("file") MultipartFile file,
@@ -141,6 +144,45 @@ public class DocUploadController {
     @GetMapping("/list")
     public List<TtKnowledgeDoc> list() {
         return docRepo.findAll();
+    }
+
+    /**
+     * 文档详情：元信息 + ES 中该文档的所有切片内容（按 chunkIndex 排序），用于前端可视化查看
+     */
+    @GetMapping("/detail")
+    public Map<String, Object> detail(@RequestParam String docId) {
+        Map<String, Object> result = new java.util.HashMap<>();
+        docRepo.findByDocId(docId).ifPresent(meta -> {
+            result.put("docId", meta.getDocId());
+            result.put("docName", meta.getDocName());
+            result.put("docType", meta.getDocType());
+            result.put("status", meta.getStatus());
+            result.put("chunkCount", meta.getChunkCount());
+            result.put("failMsg", meta.getFailMsg());
+        });
+        List<Map<String, Object>> chunks = new java.util.ArrayList<>();
+        try {
+            co.elastic.clients.elasticsearch.core.SearchResponse<KnowledgeChunk> resp = esClient.search(s -> s
+                            .index("table_tennis_knowledge")
+                            .query(q -> q.term(t -> t.field("docId").value(docId)))
+                            .sort(so -> so.field(f -> f.field("chunkIndex")))
+                            .size(1000),
+                    KnowledgeChunk.class);
+            resp.hits().hits().forEach(hit -> {
+                KnowledgeChunk c = hit.source();
+                if (c == null) return;
+                Map<String, Object> item = new java.util.HashMap<>();
+                item.put("chunkIndex", c.getChunkIndex());
+                item.put("title", c.getTitle());
+                item.put("content", c.getContent());
+                item.put("source", c.getSource());
+                chunks.add(item);
+            });
+        } catch (Exception e) {
+            log.warn("查询文档切片失败 docId={}: {}", docId, e.getMessage());
+        }
+        result.put("chunks", chunks);
+        return result;
     }
 
     private TtKnowledgeDoc newMeta(String docId, String name, String type, String path) {
