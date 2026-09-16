@@ -43,6 +43,10 @@ const loading = ref(false)
 const chatBox = ref(null)
 const suggests = ['张三的打法是什么', '我和李四的比赛记录', '长胶怎么应对']
 
+// 会话 ID：localStorage 持久化，刷新页面后多轮记忆仍在
+const sessionId = localStorage.getItem('pp_session_id') || crypto.randomUUID()
+localStorage.setItem('pp_session_id', sessionId)
+
 function escapeHtml(s) {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
@@ -67,7 +71,7 @@ async function send() {
   messages.value.push({ role: 'ai', content: '思考中…' })
   scrollToBottom()
   try {
-    const res = await chatAsk(q)
+    const res = await chatAsk(sessionId, q)
     messages.value[messages.value.length - 1].content = res.data
   } catch (e) {
     messages.value[messages.value.length - 1].content = '请求失败：' + (e.message || e) + '（请确认后端已启动）'

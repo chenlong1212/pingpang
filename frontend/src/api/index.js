@@ -5,10 +5,10 @@ const api = axios.create({
   timeout: 120000
 })
 
-// 聊天（text/plain，返回纯文本）
-export const chatAsk = (question) =>
-  api.post('/chat/ask', question, {
-    headers: { 'Content-Type': 'text/plain' },
+// 聊天（JSON 携带 sessionId 实现多轮会话记忆，返回纯文本）
+export const chatAsk = (sessionId, question) =>
+  api.post('/chat/ask', { sessionId, question }, {
+    headers: { 'Content-Type': 'application/json' },
     responseType: 'text'
   })
 
